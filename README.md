@@ -2,8 +2,76 @@
 
 ## Como rodar:
 No terminal:
-- make (compila o código)
-- ./game (roda o código)
+- make run
+
+## Requisitos
+
+### 1. Windows
+
+- Windows 11, ou Windows 10 atualizado (versão 2004 ou superior; para a janela
+  gráfica funcionar, de preferência build 19044 ou superior).
+- Virtualização habilitada na BIOS/UEFI (na maioria dos PCs já vem ativada).
+
+### 2. WSL2 com Ubuntu
+
+Abra o **PowerShell como administrador** e rode:
+
+```powershell
+wsl --install
+```
+
+Reinicie o computador quando pedido. Ao abrir o Ubuntu pela primeira vez, crie
+um usuário e uma senha.
+
+Se o WSL já estava instalado, atualize e confira a versão:
+
+```powershell
+wsl --update
+wsl -l -v
+```
+
+A coluna `VERSION` do Ubuntu deve mostrar `2`. Se mostrar `1`, converta:
+
+```powershell
+wsl --set-version Ubuntu 2
+```
+
+### 3. Pacotes no Ubuntu (dentro do WSL)
+
+```bash
+sudo apt update
+sudo apt install build-essential nasm libsdl2-dev gdb
+```
+
+| Pacote | Para que serve |
+|---|---|
+| `build-essential` | `gcc` (usado só como linker), `make` e `binutils` (`ld`) |
+| `nasm` | Montador que transforma `.asm` em `.o` |
+| `libsdl2-dev` | Biblioteca SDL2 (janela e desenho) e o comando `sdl2-config` |
+| `gdb` | Depurador (opcional, mas muito útil em assembly) |
+
+## Estrutura do projeto
+
+Mantenha a pasta dentro do sistema de arquivos do Linux (por exemplo `~/game`),
+não em `/mnt/c/...`.
+
+```
+game/
+├── game.asm
+├── Makefile
+└── README.md
+```
+
+## Compilar e executar
+
+Com o Makefile:
+
+```bash
+make          # compila
+./game        # executa
+make run      # compila (se preciso) e executa
+make clean    # apaga game e game.o
+```
 
 ## Conceitos básicos:
 rax 	;resultado de operações e número da syscall  
