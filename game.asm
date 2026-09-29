@@ -12,7 +12,6 @@ _start:
     mov rdx, len      ; quantos bytes
     syscall
 
-
     mov rax, 60       ; syscall exit
     xor rdi, rdi      ; código de saída 0
     syscall
