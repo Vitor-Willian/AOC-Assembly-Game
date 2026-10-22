@@ -1,5 +1,6 @@
 default rel
 extern SDL_RenderSetLogicalSize
+extern SDL_GetKeyboardState
 
 extern SDL_Init, SDL_CreateWindow, SDL_CreateRenderer
 extern SDL_PollEvent
@@ -19,6 +20,12 @@ SDL_KEYDOWN                   equ 0x300
 SDLK_ESCAPE                   equ 27
 W equ 640
 H equ 480
+
+VEL    equ 4        ; velocidade em pixels por quadro
+SC_W   equ 26       ; scancodes (posição física da tecla)
+SC_A   equ 4
+SC_S   equ 22
+SC_D   equ 7
 
 section .data
     titulo      db "Sprite", 0
@@ -106,12 +113,16 @@ main:
     mov  eax, [tex_h]
     mov  [rsp+76], eax           ; altura
 
+    xor  edi, edi
+    call SDL_GetKeyboardState    ; devolve ponteiro para um array de bytes
+    mov  r13, rax                ; r13 = estado do teclado
+
 .loop:
 .eventos:
     mov  rdi, rsp
     call SDL_PollEvent
     test eax, eax
-    jz   .desenha
+    jz   .teclado           ; <- antes era .desenha
     cmp  dword [rsp], SDL_QUIT
     je   .fim
     cmp  dword [rsp], SDL_KEYDOWN       ; foi uma tecla pressionada?
@@ -119,6 +130,54 @@ main:
     cmp  dword [rsp+20], SDLK_ESCAPE    ; era o ESC?
     je   .fim
     jmp  .eventos
+
+.teclado:
+    ; ---- lê as teclas e altera x, y ----
+    cmp  byte [r13 + SC_W], 0
+    je   .sem_w
+    sub  dword [rsp+68], VEL        ; W: sobe (y diminui)
+.sem_w:
+    cmp  byte [r13 + SC_S], 0
+    je   .sem_s
+    add  dword [rsp+68], VEL        ; S: desce (y aumenta)
+.sem_s:
+    cmp  byte [r13 + SC_A], 0
+    je   .sem_a
+    sub  dword [rsp+64], VEL        ; A: esquerda (x diminui)
+.sem_a:
+    cmp  byte [r13 + SC_D], 0
+    je   .sem_d
+    add  dword [rsp+64], VEL        ; D: direita (x aumenta)
+.sem_d:
+
+    ; ---- limita x entre 0 e W - largura ----
+    mov  eax, [rsp+64]
+    test eax, eax
+    jge  .x_min_ok
+    xor  eax, eax                   ; passou da esquerda: x = 0
+.x_min_ok:
+    mov  ecx, W
+    sub  ecx, [tex_w]               ; x máximo
+    cmp  eax, ecx
+    jle  .x_max_ok
+    mov  eax, ecx                   ; passou da direita: x = máximo
+.x_max_ok:
+    mov  [rsp+64], eax
+
+    ; ---- limita y entre 0 e H - altura ----
+    mov  eax, [rsp+68]
+    test eax, eax
+    jge  .y_min_ok
+    xor  eax, eax
+.y_min_ok:
+    mov  ecx, H
+    sub  ecx, [tex_h]
+    cmp  eax, ecx
+    jle  .y_max_ok
+    mov  eax, ecx
+.y_max_ok:
+    mov  [rsp+68], eax
+
 
 .desenha:
     mov  rdi, r12                ; fundo cinza-escuro
