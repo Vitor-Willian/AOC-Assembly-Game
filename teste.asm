@@ -18,7 +18,7 @@ H equ 480
 
 section .data
     titulo      db "Sprite", 0
-    caminho_bmp db "Teste Rei-1.png.bmp", 0
+    caminho_bmp db "rei.bmp", 0
     modo_leitura db "rb", 0
 
 section .bss
