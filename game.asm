@@ -5,6 +5,9 @@ extern SDL_PollEvent
 extern SDL_SetRenderDrawColor, SDL_RenderClear, SDL_RenderFillRect
 extern SDL_RenderPresent, SDL_Delay
 extern SDL_DestroyRenderer, SDL_DestroyWindow, SDL_Quit
+extern SDL_RWFromFile, SDL_LoadBMP_RW
+extern SDL_CreateTextureFromSurface, SDL_FreeSurface
+extern SDL_RenderCopy, SDL_DestroyTexture
 global main
 
 SDL_INIT_VIDEO     equ 0x20
@@ -34,6 +37,8 @@ section .data
     msg db "Starting the game...", 10     ; 10 = \n
     len equ $ - msg                       ; tamanho do texto em bytes
     titulo db "Quadrado", 0                ; título da janela terminado com zero
+    img_file db "chao.bmp", 0           ; import do bmp do chao(?)
+    img_mode db "rb", 0
 
 section .text
 
@@ -47,9 +52,11 @@ terminal:
     ret                        ; volta para o main
 
 main:
-    push rbx                   ; salva RBX, usado para guardar a janela
-    push r12                   ; salva R12, usado para guardar o renderer
-    sub rsp, 88                ; reserva espaço para SDL_Event e SDL_Rect
+    push rbx                   ; salva RBX (janela)
+    push r12                   ; salva R12 (renderer)
+    push r13                   ; salva R13 (nossa textura do chão)
+    push r14
+    sub rsp, 88                ; (atualize a liberação no final de acordo)
 
     call terminal              ; imprime a mensagem no terminal
 
@@ -71,6 +78,28 @@ main:
     xor edx, edx               ; nenhuma flag adicional
     call SDL_CreateRenderer    ; cria o renderer
     mov r12, rax               ; salva o endereço do renderer em R12
+
+; --- Carregar textura do chão --- meio confuso
+    ; 1. Abre o arquivo BMP
+    lea rdi, [img_file]         ; nome do arquivo
+    lea rsi, [img_mode]         ; modo de leitura ("rb")
+    call SDL_RWFromFile         ; Retorna um ponteiro de arquivo em RAX
+
+    ; 2. Converte o arquivo para uma SDL_Surface (Pixels na RAM)
+    mov rdi, rax                ; passa o arquivo aberto como argumento
+    mov esi, 1                  ; flag 1 = fechar o arquivo automaticamente após ler
+    call SDL_LoadBMP_RW         ; Retorna a Surface em RAX
+    mov r14, rax                ; Guarda a Surface temporariamente em R14
+
+    ; 3. Envia a imagem da RAM para a Placa de Vídeo (Cria a SDL_Texture)
+    mov rdi, r12                ; argumento 1: Renderer
+    mov rsi, r14                ; argumento 2: Surface
+    call SDL_CreateTextureFromSurface
+    mov r13, rax                ; SALVA A TEXTURA EM R13! (Usaremos no loop)
+
+    ; 4. Libera a Surface da RAM (já está na GPU, não precisamos mais na RAM)
+    mov rdi, r14
+    call SDL_FreeSurface
 
 ; primeiro retângulo
     mov dword [rsp+64], RX * CELL + (CELL - RW) / 2
@@ -95,22 +124,15 @@ main:
     jmp .eventos               ; continua lendo os eventos
 
 .desenha:
-    mov rdi, r12               ; primeiro argumento: renderer
-    mov esi, 0                 ; valor vermelho do fundo
-    mov edx, 0                 ; valor verde do fundo
-    mov ecx, 0                 ; valor azul do fundo
-    mov r8d, 255               ; valor alfa, totalmente opaco
-    call SDL_SetRenderDrawColor ; define a cor do fundo
+    mov rdi, r12
+    call SDL_RenderClear        ; limpa a tela
 
-    mov rdi, r12               ; primeiro argumento: renderer
-    call SDL_RenderClear        ; limpa a tela usando a cor definida
-
-    mov rdi, r12               ; primeiro argumento: renderer
-    mov esi, 244               ; valor vermelho do primeiro retângulo
-    mov edx, 208               ; valor verde do primeiro retângulo
-    mov ecx, 163               ; valor azul do primeiro retângulo
-    mov r8d, 255               ; valor alfa, totalmente opaco
-    call SDL_SetRenderDrawColor ; define a cor do primeiro retângulo
+    ; 2. Pinta a textura do chão na tela inteira
+    mov rdi, r12                ; argumento 1: Renderer
+    mov rsi, r13                ; argumento 2: Textura do chao 
+    xor edx, edx                ; argumento 3: srcrect = NULL (pegar a imagem toda)
+    xor ecx, ecx                ; argumento 4: dstrect = NULL (esticar para a tela toda)
+    call SDL_RenderCopy
 
     ; primeiro quadrado, acima do centro
     mov dword [rsp+64], CENTER_X - SIZE / 2   ; x = 795
@@ -148,6 +170,8 @@ main:
     jmp .loop                  ; volta para o início do loop principal
 
 .fim:
+    mov rdi, r13
+    call SDL_DestroyTexture
     mov rdi, r12               ; endereço do renderer
     call SDL_DestroyRenderer   ; destrói o renderer
 
@@ -157,6 +181,8 @@ main:
     call SDL_Quit              ; encerra o SDL
 
     add rsp, 88                ; libera o espaço reservado na pilha
+    pop r14
+    pop r13
     pop r12                    ; restaura R12
     pop rbx                    ; restaura RBX
 
