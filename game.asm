@@ -18,8 +18,8 @@ SDL_QUIT           equ 0x100
 SDL_WINDOW_FULLSCREEN_DESKTOP equ 0x1001
 SDL_KEYDOWN                   equ 0x300
 SDLK_ESCAPE                   equ 27
-W equ 640
-H equ 480
+W equ 800
+H equ 450
 
 VEL    equ 4        ; velocidade em pixels por quadro
 SC_W   equ 26       ; scancodes (posição física da tecla)
@@ -31,6 +31,8 @@ section .data
     titulo      db "Sprite", 0
     caminho_bmp db "rei.bmp", 0
     modo_leitura db "rb", 0
+    img_mode db "rb", 0
+    img_file db "chao.bmp", 0 
 
 section .bss
     tex_w resd 1        ; largura da imagem (preenchido por SDL_QueryTexture)
@@ -45,7 +47,8 @@ main:
     push r12
     push r13
     push r14
-    sub  rsp, 88          ; <- era 80
+    push r15
+    sub  rsp, 80          ; <- era 80
 
     mov  edi, SDL_INIT_VIDEO
     call SDL_Init
@@ -68,6 +71,25 @@ main:
     mov  esi, W              ; 640
     mov  edx, H              ; 480
     call SDL_RenderSetLogicalSize
+
+    ; ---- chao ----
+
+    lea rdi, [img_file]
+    lea rsi, [img_mode]
+    call SDL_RWFromFile
+
+    mov rdi, rax 
+    mov esi, 1
+    call SDL_LoadBMP_RW
+    mov r13, rax
+
+    mov rdi, r12
+    mov rsi, r13
+    call SDL_CreateTextureFromSurface
+    mov r15, rax
+
+    mov rdi, r13
+    call SDL_FreeSurface
 
     ; ---- carrega o sprite ----
     lea  rdi, [caminho_bmp]
@@ -180,14 +202,14 @@ main:
 
 
 .desenha:
-    mov  rdi, r12                ; fundo cinza-escuro
-    mov  esi, 30
-    mov  edx, 30
-    mov  ecx, 30
-    mov  r8d, 255
-    call SDL_SetRenderDrawColor
-    mov  rdi, r12
+    mov  rdi, r12 
     call SDL_RenderClear
+
+    mov rdi, r12
+    mov rsi, r15
+    xor edx, edx
+    xor ecx, ecx
+    call SDL_RenderCopy
 
     mov  rdi, r12                 ; SDL_RenderCopy(renderer, texture, NULL, &destino)
     mov  rsi, r14
@@ -203,6 +225,8 @@ main:
     jmp  .loop
 
 .fim:
+    mov  rdi, r15
+    call SDL_DestroyTexture
     mov  rdi, r14
     call SDL_DestroyTexture
     mov  rdi, r12
@@ -211,7 +235,8 @@ main:
     call SDL_DestroyWindow
     call SDL_Quit
 
-    add  rsp, 88          ; <- era 80
+    add  rsp, 80          ; <- era 80
+    pop  r15
     pop  r14
     pop  r13
     pop  r12
