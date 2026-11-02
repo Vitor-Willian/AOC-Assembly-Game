@@ -29,10 +29,9 @@ SC_D   equ 7
 
 section .data
     titulo      db "Sprite", 0
-    reiFrente_bmp db "Rei.bmp", 0
-    reiCostas_bmp db "Rei Costas.bmp", 0
-    reiFrenteR_bmp db "Rei C.bmp", 0
-    reiCostasR_bmp db "Rei Costas C.bmp", 0
+    rei_bmp db "Rei.bmp", 0
+    reiC1_bmp db "Rei C.bmp", 0
+    reiC2_bmp db "Rei C2.bmp", 0
     modo_leitura db "rb", 0
     img_mode db "rb", 0
     img_file db "chao.bmp", 0 
@@ -95,7 +94,7 @@ main:
     call SDL_FreeSurface
 
     ; ---- carrega o sprite ----
-    lea  rdi, [reiFrente_bmp]
+    lea  rdi, [rei_bmp]
     lea  rsi, [modo_leitura]
     call SDL_RWFromFile          ; devolve SDL_RWops*
 
