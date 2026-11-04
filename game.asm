@@ -37,8 +37,14 @@ section .data
     img_file db "chao.bmp", 0 
 
 section .bss
-    tex_w resd 1        ; largura da imagem (preenchido por SDL_QueryTexture)
-    tex_h resd 1        ; altura da imagem
+    tex_w         resd 1   ; largura da imagem (preenchido por SDL_QueryTexture)
+    tex_h         resd 1   ; altura da imagem
+    king_idle     resq 1   ; textura do Rei.bmp (sprite parado)
+    king_walk     resq 2   ; [0] = Rei C.bmp, [1] = Rei C2.bmp
+    frame_atual   resd 1   ; 0 ou 1 (qual das duas está ativa)
+    cont_anim     resd 1   ; quadros passados desde a última troca
+    movendo       resd 1   ; 0 = parado, 1 = se moveu neste quadro
+    walk_delay    equ 4    ; trocar de frame a cada X quadros
 
 section .text
 ; Pilha em main:
@@ -74,7 +80,7 @@ main:
     mov  edx, H              ; 480
     call SDL_RenderSetLogicalSize
 
-    ; ---- chao ----
+    ; ---- chão ----
 
     lea rdi, [img_file]
     lea rsi, [img_mode]
@@ -244,6 +250,30 @@ main:
     pop  r12
     pop  rbx
     xor  eax, eax
+    ret
+
+CarregarTextura:
+    push rbx                        ; guarda rbx (e alinha a pilha em 16)
+    lea  rsi, [modo_leitura]
+    call SDL_RWFromFile             ; rdi já tem o caminho
+
+    mov  rdi, rax
+    mov  esi, 1
+    call SDL_LoadBMP_RW
+    mov  rbx, rax                   ; rbx = surface
+
+    mov  rdi, r12
+    mov  rsi, rbx
+    call SDL_CreateTextureFromSurface
+
+    sub  rsp, 16                    ; espaço temporário (mantém alinhamento)
+    mov  [rsp], rax                 ; salva a textura: FreeSurface vai sobrescrever rax
+    mov  rdi, rbx
+    call SDL_FreeSurface
+    mov  rax, [rsp]                 ; recupera a textura
+    add  rsp, 16
+
+    pop  rbx
     ret
 
 section .note.GNU-stack noexec
