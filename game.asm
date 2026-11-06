@@ -29,14 +29,22 @@ SC_D   equ 7
 
 section .data
     titulo      db "Sprite", 0
-    caminho_bmp db "rei.bmp", 0
+    rei_bmp db "Rei.bmp", 0
+    reiC1_bmp db "Rei C1.bmp", 0
+    reiC2_bmp db "Rei C2.bmp", 0
     modo_leitura db "rb", 0
     img_mode db "rb", 0
     img_file db "chao.bmp", 0 
 
 section .bss
-    tex_w resd 1        ; largura da imagem (preenchido por SDL_QueryTexture)
-    tex_h resd 1        ; altura da imagem
+    tex_w         resd 1   ; largura da imagem (preenchido por SDL_QueryTexture)
+    tex_h         resd 1   ; altura da imagem
+    king_idle     resq 1   ; textura do Rei.bmp (sprite parado)
+    king_walk     resq 2   ; [0] = Rei C.bmp, [1] = Rei C2.bmp
+    frame_atual   resd 1   ; 0 ou 1 (qual das duas está ativa)
+    cont_anim     resd 1   ; quadros passados desde a última troca
+    movendo       resd 1   ; 0 = parado, 1 = se moveu neste quadro
+    walk_delay    equ 8    ; trocar de frame a cada X quadros
 
 section .text
 ; Pilha em main:
@@ -72,42 +80,29 @@ main:
     mov  edx, H              ; 480
     call SDL_RenderSetLogicalSize
 
-    ; ---- chao ----
+    ; ---- chão ----
 
-    lea rdi, [img_file]
-    lea rsi, [img_mode]
-    call SDL_RWFromFile
+    lea  rdi, [img_file]
+    call CarregarTextura
+    mov  r15, rax                   ; r15 = textura do chão
 
-    mov rdi, rax 
-    mov esi, 1
-    call SDL_LoadBMP_RW
-    mov r13, rax
-
-    mov rdi, r12
-    mov rsi, r13
-    call SDL_CreateTextureFromSurface
-    mov r15, rax
-
-    mov rdi, r13
-    call SDL_FreeSurface
 
     ; ---- carrega o sprite ----
-    lea  rdi, [caminho_bmp]
-    lea  rsi, [modo_leitura]
-    call SDL_RWFromFile          ; devolve SDL_RWops*
+    ; sprite parado
+    lea  rdi, [rei_bmp]
+    call CarregarTextura
+    mov  r14, rax                   ; r14 = textura atual (usada no desenho)
+    mov  [king_idle], rax          ; cópia guardada
 
-    mov  rdi, rax                ; primeiro argumento: o RWops que acabamos de abrir
-    mov  esi, 1                  ; segundo argumento: 1 = fechar o arquivo sozinho
-    call SDL_LoadBMP_RW          ; devolve SDL_Surface*
-    mov  r13, rax
+    ; andando, frame 0
+    lea  rdi, [reiC1_bmp]
+    call CarregarTextura
+    mov  [king_walk], rax
 
-    mov  rdi, r12
-    mov  rsi, r13
-    call SDL_CreateTextureFromSurface   ; devolve SDL_Texture*
-    mov  r14, rax
-
-    mov  rdi, r13                ; a surface não é mais necessária
-    call SDL_FreeSurface
+    ; andando, frame 1
+    lea  rdi, [reiC2_bmp]
+    call CarregarTextura
+    mov  [king_walk + 8], rax     ; +8: segundo ponteiro do array
 
     ; pega o tamanho real da imagem, para não distorcer o sprite
     mov  rdi, r14
@@ -154,6 +149,8 @@ main:
     jmp  .eventos
 
 .teclado:
+    mov  r8d, [rsp+64]              ; x antigo
+    mov  r9d, [rsp+68]              ; y antigo
     ; ---- lê as teclas e altera x, y ----
     cmp  byte [r13 + SC_W], 0
     je   .sem_w
@@ -199,7 +196,41 @@ main:
     mov  eax, ecx
 .y_max_ok:
     mov  [rsp+68], eax
+    
+mov  dword [movendo], 0
+    mov  eax, [rsp+64]
+    cmp  eax, r8d
+    jne  .mexeu
+    mov  eax, [rsp+68]
+    cmp  eax, r9d
+    je   .animacao
+.mexeu:
+    mov  dword [movendo], 1
 
+.animacao:
+    ; lógica de animação aqui
+    ; por exemplo, alternar entre texturas diferentes
+    ; para simular movimento
+    cmp  dword [movendo], 0
+    jne  .andando
+
+    ; parado
+    mov  dword [frame_atual], 0
+    mov  dword [cont_anim], 0
+    mov  r14, [king_idle]
+    jmp  .desenha
+
+.andando:
+    inc  dword [cont_anim]
+    cmp  dword [cont_anim], walk_delay
+    jl   .escolhe
+    mov  dword [cont_anim], 0
+    xor  dword [frame_atual], 1     ; alterna 0 <-> 1
+
+.escolhe:
+    mov  eax, [frame_atual]         ; eax zera a parte alta de rax
+    lea  rcx, [king_walk]
+    mov  r14, [rcx + rax*8]         ; r14 = textura do frame atual
 
 .desenha:
     mov  rdi, r12 
@@ -227,7 +258,11 @@ main:
 .fim:
     mov  rdi, r15
     call SDL_DestroyTexture
-    mov  rdi, r14
+    mov  rdi, [king_idle]
+    call SDL_DestroyTexture
+    mov  rdi, [king_walk]
+    call SDL_DestroyTexture
+    mov  rdi, [king_walk + 8]
     call SDL_DestroyTexture
     mov  rdi, r12
     call SDL_DestroyRenderer
@@ -242,6 +277,30 @@ main:
     pop  r12
     pop  rbx
     xor  eax, eax
+    ret
+
+CarregarTextura:
+    push rbx                        ; guarda rbx (e alinha a pilha em 16)
+    lea  rsi, [modo_leitura]
+    call SDL_RWFromFile             ; rdi já tem o caminho
+
+    mov  rdi, rax
+    mov  esi, 1
+    call SDL_LoadBMP_RW
+    mov  rbx, rax                   ; rbx = surface
+
+    mov  rdi, r12
+    mov  rsi, rbx
+    call SDL_CreateTextureFromSurface
+
+    sub  rsp, 16                    ; espaço temporário (mantém alinhamento)
+    mov  [rsp], rax                 ; salva a textura: FreeSurface vai sobrescrever rax
+    mov  rdi, rbx
+    call SDL_FreeSurface
+    mov  rax, [rsp]                 ; recupera a textura
+    add  rsp, 16
+
+    pop  rbx
     ret
 
 section .note.GNU-stack noexec
