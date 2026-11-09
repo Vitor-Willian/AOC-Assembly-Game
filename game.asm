@@ -8,6 +8,7 @@ extern SDL_SetRenderDrawColor, SDL_RenderClear, SDL_RenderPresent, SDL_Delay
 extern SDL_RWFromFile, SDL_LoadBMP_RW, SDL_CreateTextureFromSurface, SDL_FreeSurface
 extern SDL_QueryTexture, SDL_RenderCopy, SDL_DestroyTexture
 extern SDL_DestroyRenderer, SDL_DestroyWindow, SDL_Quit
+extern SDL_RenderDrawRect   ; só pra testar
 global main
 
 SDL_INIT_VIDEO     equ 0x20
@@ -27,6 +28,11 @@ SC_A   equ 4
 SC_S   equ 22
 SC_D   equ 7
 
+BOXREI_A equ 30     ; altura da hitbox do rei 
+BOXREI_L equ 20     ; largura da hitbox
+
+
+
 section .data
     titulo      db "Sprite", 0
     rei_bmp db "Rei.bmp", 0
@@ -45,6 +51,8 @@ section .bss
     cont_anim     resd 1   ; quadros passados desde a última troca
     movendo       resd 1   ; 0 = parado, 1 = se moveu neste quadro
     walk_delay    equ 8    ; trocar de frame a cada X quadros
+    rei_x         resd 1   ; posisão x hitbox
+    rei_y         resd 1   ; posisão y hitbox
 
 section .text
 ; Pilha em main:
@@ -149,59 +157,59 @@ main:
     jmp  .eventos
 
 .teclado:
-    mov  r8d, [rsp+64]              ; x antigo
-    mov  r9d, [rsp+68]              ; y antigo
+    mov  r8d, [rei_x]              ; x antigo (antes era rsp+64) 
+    mov  r9d, [rei_y]              ; y antigo (rsp+68)
     ; ---- lê as teclas e altera x, y ----
     cmp  byte [r13 + SC_W], 0
     je   .sem_w
-    sub  dword [rsp+68], VEL        ; W: sobe (y diminui)
+    sub  dword [rei_y], VEL        ; W: sobe (y diminui)    trocado 
 .sem_w:
     cmp  byte [r13 + SC_S], 0
     je   .sem_s
-    add  dword [rsp+68], VEL        ; S: desce (y aumenta)
+    add  dword [rei_y], VEL        ; S: desce (y aumenta)
 .sem_s:
     cmp  byte [r13 + SC_A], 0
     je   .sem_a
-    sub  dword [rsp+64], VEL        ; A: esquerda (x diminui)
+    sub  dword [rei_x], VEL        ; A: esquerda (x diminui)
 .sem_a:
     cmp  byte [r13 + SC_D], 0
     je   .sem_d
-    add  dword [rsp+64], VEL        ; D: direita (x aumenta)
+    add  dword [rei_x], VEL        ; D: direita (x aumenta)
 .sem_d:
 
     ; ---- limita x entre 0 e W - largura ----
-    mov  eax, [rsp+64]
+    mov  eax, [rei_x]
     test eax, eax
     jge  .x_min_ok
     xor  eax, eax                   ; passou da esquerda: x = 0
 .x_min_ok:
     mov  ecx, W
-    sub  ecx, [tex_w]               ; x máximo
+    sub  ecx, BOXREI_L               ; x máximo trocado [tex_w] -> BOXREI_L
     cmp  eax, ecx
     jle  .x_max_ok
     mov  eax, ecx                   ; passou da direita: x = máximo
 .x_max_ok:
-    mov  [rsp+64], eax
+    mov  [rei_x], eax
 
     ; ---- limita y entre 0 e H - altura ----
-    mov  eax, [rsp+68]
+    mov  eax, [rei_y]
     test eax, eax
     jge  .y_min_ok
     xor  eax, eax
 .y_min_ok:
     mov  ecx, H
-    sub  ecx, [tex_h]
+    sub  ecx, BOXREI_A              
     cmp  eax, ecx
     jle  .y_max_ok
     mov  eax, ecx
 .y_max_ok:
-    mov  [rsp+68], eax
+    mov  [rei_y], eax
     
 mov  dword [movendo], 0
-    mov  eax, [rsp+64]
+    mov  eax, [rei_x]          
     cmp  eax, r8d
     jne  .mexeu
-    mov  eax, [rsp+68]
+    mov  eax, [rei_y]
     cmp  eax, r9d
     je   .animacao
 .mexeu:
@@ -242,11 +250,43 @@ mov  dword [movendo], 0
     xor ecx, ecx
     call SDL_RenderCopy
 
+    mov eax, [rei_x]            ; hitbox largura
+    mov [rsp+64], eax
+
+    mov eax, [rei_y]            ; hitbox altura
+    mov [rsp+68], eax
+
     mov  rdi, r12                 ; SDL_RenderCopy(renderer, texture, NULL, &destino)
     mov  rsi, r14
     xor  edx, edx                 ; srcrect = NULL -> usa a imagem inteira
     lea  rcx, [rsp+64]            ; dstrect
     call SDL_RenderCopy
+
+    ; 1. Define a cor do "pincel" do SDL para Vermelho (R=255, G=0, B=0, Alpha=255)
+    mov rdi, r12
+    mov esi, 255
+    xor edx, edx
+    xor ecx, ecx
+    mov r8d, 255
+    call SDL_SetRenderDrawColor
+
+    ; 2. Ajusta as medidas do retângulo na pilha para o tamanho físico (Hitbox)
+    ; X e Y já estão corretos em [rsp+64] e [rsp+68], basta mudar a Largura e Altura:
+    mov dword [rsp+72], BOXREI_L        
+    mov dword [rsp+76], BOXREI_A        
+
+    ; 3. Desenha apenas o contorno do retângulo
+    mov rdi, r12
+    lea rsi, [rsp+64]             ; Passa o endereço do nosso retângulo ajustado
+    call SDL_RenderDrawRect
+
+    ; 4. Restaura a cor do pincel para Preto, senão a tela piscará vermelho no próximo frame
+    mov rdi, r12
+    xor esi, esi
+    xor edx, edx
+    xor ecx, ecx
+    mov r8d, 255
+    call SDL_SetRenderDrawColor
 
     mov  rdi, r12
     call SDL_RenderPresent
