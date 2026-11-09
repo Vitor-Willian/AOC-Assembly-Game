@@ -31,6 +31,26 @@ SC_D   equ 7
 BOXREI_A equ 30     ; altura da hitbox do rei 
 BOXREI_L equ 20     ; largura da hitbox
 
+WALL1_X equ 0       ; obstaculo teste
+WALL1_Y equ 0
+WALL1_A equ 450
+WALL1_L equ 30
+
+WALL2_X equ 0       
+WALL2_Y equ 0
+WALL2_A equ 30
+WALL2_L equ 800
+
+WALL3_X equ 770     
+WALL3_Y equ 0
+WALL3_A equ 450
+WALL3_L equ 30
+
+WALL4_X equ 0       
+WALL4_Y equ 420
+WALL4_A equ 30
+WALL4_L equ 800
+
 
 
 section .data
@@ -125,13 +145,13 @@ main:
     mov  r9d, W
     sub  r9d, eax
     sar  r9d, 1                  ; (W - largura) / 2
-    mov  [rsp+64], r9d           ; x
+    mov  [rei_x], r9d           ; x
 
     mov  eax, [tex_h]
     mov  r9d, H
     sub  r9d, eax
     sar  r9d, 1                  ; (H - altura) / 2
-    mov  [rsp+68], r9d           ; y
+    mov  [rei_y], r9d           ; y
 
     mov  eax, [tex_w]
     mov  [rsp+72], eax           ; largura
@@ -204,16 +224,55 @@ main:
     mov  eax, ecx
 .y_max_ok:
     mov  [rei_y], eax
+
+    mov edi, WALL1_X        
+    mov esi, WALL1_Y
+    mov edx, WALL1_L
+    mov ecx, WALL1_A
+    call TestaColisao      
+    cmp rax, 1
+    je .houve_colisao
+
+    mov edi, WALL2_X
+    mov esi, WALL2_Y
+    mov edx, WALL2_L
+    mov ecx, WALL2_A
+    call TestaColisao
+    cmp rax, 1
+    je .houve_colisao
+
+    mov edi, WALL3_X
+    mov esi, WALL3_Y
+    mov edx, WALL3_L
+    mov ecx, WALL3_A
+    call TestaColisao
+    cmp rax, 1
+    je .houve_colisao
+
+    mov edi, WALL4_X
+    mov esi, WALL4_Y
+    mov edx, WALL4_L
+    mov ecx, WALL4_A
+    call TestaColisao
+    cmp rax, 1
+    je .houve_colisao
+
+    jmp .sem_colisao
+
+    .houve_colisao:         ; volta pra onde estava
+        mov [rei_x], r8d
+        mov [rei_y], r9d
     
-mov  dword [movendo], 0
-    mov  eax, [rei_x]          
-    cmp  eax, r8d
-    jne  .mexeu
-    mov  eax, [rei_y]
-    cmp  eax, r9d
-    je   .animacao
-.mexeu:
-    mov  dword [movendo], 1
+    .sem_colisao:
+    mov  dword [movendo], 0
+        mov  eax, [rei_x]          
+        cmp  eax, r8d
+        jne  .mexeu
+        mov  eax, [rei_y]
+        cmp  eax, r9d
+        je   .animacao
+    .mexeu:
+        mov  dword [movendo], 1
 
 .animacao:
     ; lógica de animação aqui
@@ -256,6 +315,12 @@ mov  dword [movendo], 0
     mov eax, [rei_y]            ; hitbox altura
     mov [rsp+68], eax
 
+    mov eax, [tex_w]
+    mov [rsp+72], eax
+
+    mov eax, [tex_h]
+    mov [rsp+76], eax
+
     mov  rdi, r12                 ; SDL_RenderCopy(renderer, texture, NULL, &destino)
     mov  rsi, r14
     xor  edx, edx                 ; srcrect = NULL -> usa a imagem inteira
@@ -270,17 +335,59 @@ mov  dword [movendo], 0
     mov r8d, 255
     call SDL_SetRenderDrawColor
 
-    ; 2. Ajusta as medidas do retângulo na pilha para o tamanho físico (Hitbox)
-    ; X e Y já estão corretos em [rsp+64] e [rsp+68], basta mudar a Largura e Altura:
     mov dword [rsp+72], BOXREI_L        
     mov dword [rsp+76], BOXREI_A        
 
-    ; 3. Desenha apenas o contorno do retângulo
     mov rdi, r12
-    lea rsi, [rsp+64]             ; Passa o endereço do nosso retângulo ajustado
+    lea rsi, [rsp+64]            
     call SDL_RenderDrawRect
 
-    ; 4. Restaura a cor do pincel para Preto, senão a tela piscará vermelho no próximo frame
+    ; parede verde
+    mov rdi, r12
+    xor esi, esi            ; R = 0
+    mov edx, 255            ; G = 255
+    xor ecx, ecx            ; B = 0
+    mov r8d, 255            ; Alpha = 255
+    call SDL_SetRenderDrawColor
+
+    ; contorno 
+    mov dword [rsp+64], WALL1_X
+    mov dword [rsp+68], WALL1_Y
+    mov dword [rsp+72], WALL1_L
+    mov dword [rsp+76], WALL1_A
+
+    mov rdi, r12
+    lea rsi, [rsp+64]
+    call SDL_RenderDrawRect
+    
+    mov dword [rsp+64], WALL2_X
+    mov dword [rsp+68], WALL2_Y
+    mov dword [rsp+72], WALL2_L
+    mov dword [rsp+76], WALL2_A
+
+    mov rdi, r12
+    lea rsi, [rsp+64]
+    call SDL_RenderDrawRect
+
+    mov dword [rsp+64], WALL3_X
+    mov dword [rsp+68], WALL3_Y
+    mov dword [rsp+72], WALL3_L
+    mov dword [rsp+76], WALL3_A
+
+    mov rdi, r12
+    lea rsi, [rsp+64]
+    call SDL_RenderDrawRect
+
+    mov dword [rsp+64], WALL4_X
+    mov dword [rsp+68], WALL4_Y
+    mov dword [rsp+72], WALL4_L
+    mov dword [rsp+76], WALL4_A
+
+    mov rdi, r12
+    lea rsi, [rsp+64]
+    call SDL_RenderDrawRect
+
+    ;Restaura a cor do pincel para Preto, senão a tela piscará vermelho no próximo frame
     mov rdi, r12
     xor esi, esi
     xor edx, edx
@@ -317,6 +424,35 @@ mov  dword [movendo], 0
     pop  r12
     pop  rbx
     xor  eax, eax
+    ret
+
+TestaColisao:
+    mov eax, [rei_x]            ; pega x do rei
+    mov r10d, edi               ; pega x da parede
+    add r10d, edx               ; arede X + largura
+    cmp eax, r10d               ; compara esquerda do rei(eax) com a direita da parede
+    jge .livre                  ; pula se o valor do rei for MAIOR ou igual da parede 
+
+    add eax, BOXREI_L           ; x do rei + largura do rei
+    cmp eax, edi                ; compara com direita do rei com esquerda da parede 
+    jle .livre                  ; pula se o valor do rei for MENOR ou igual da parede
+
+    mov eax, [rei_y]            ; y do rei
+    mov r10d, esi               ; y da parede 
+    add r10d, ecx               ; parede y + altura
+    cmp eax, r10d               ; compara y do rei com parte de baixo da parede 
+    jge .livre
+
+    add eax, BOXREI_A           ; y do rei + altura
+    cmp eax, esi                ; compara com parte de cima da parede
+    jle .livre
+
+.bateu:
+    mov rax, 1                  ; Retorna 1 (Houve colisão)
+    ret
+
+.livre:
+    mov rax, 0                  ; Retorna 0 (Sem colisão)
     ret
 
 CarregarTextura:
