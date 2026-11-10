@@ -22,7 +22,7 @@ SDLK_ESCAPE                   equ 27
 W equ 800
 H equ 450
 
-VEL    equ 4        ; velocidade em pixels por quadro
+VEL    equ 3        ; velocidade em pixels por quadro
 SC_W   equ 26       ; scancodes (posição física da tecla)
 SC_A   equ 4
 SC_S   equ 22
@@ -51,7 +51,15 @@ WALL4_Y equ 420
 WALL4_A equ 30
 WALL4_L equ 800
 
+ROCK_X  equ 54
+ROCK_Y  equ 69
+ROCK_A  equ 40
+ROCK_L  equ 35
 
+CAMP_X  equ 410
+CAMP_Y  equ 245
+CAMP_A  equ 15
+CAMP_L  equ 25
 
 section .data
     titulo      db "Sprite", 0
@@ -257,6 +265,22 @@ main:
     cmp rax, 1
     je .houve_colisao
 
+    mov edi, ROCK_X
+    mov esi, ROCK_Y
+    mov edx, ROCK_L
+    mov ecx, ROCK_A
+    call TestaColisao
+    cmp rax, 1
+    je .houve_colisao
+
+    mov edi, CAMP_X
+    mov esi, CAMP_Y
+    mov edx, CAMP_L
+    mov ecx, CAMP_A
+    call TestaColisao
+    cmp rax, 1
+    je .houve_colisao
+
     jmp .sem_colisao
 
     .houve_colisao:         ; volta pra onde estava
@@ -382,6 +406,24 @@ main:
     mov dword [rsp+68], WALL4_Y
     mov dword [rsp+72], WALL4_L
     mov dword [rsp+76], WALL4_A
+
+    mov rdi, r12
+    lea rsi, [rsp+64]
+    call SDL_RenderDrawRect
+
+    mov dword [rsp+64], ROCK_X
+    mov dword [rsp+68], ROCK_Y
+    mov dword [rsp+72], ROCK_L
+    mov dword [rsp+76], ROCK_A
+
+    mov rdi, r12
+    lea rsi, [rsp+64]
+    call SDL_RenderDrawRect
+
+    mov dword [rsp+64], CAMP_X
+    mov dword [rsp+68], CAMP_Y
+    mov dword [rsp+72], CAMP_L
+    mov dword [rsp+76], CAMP_A
 
     mov rdi, r12
     lea rsi, [rsp+64]
