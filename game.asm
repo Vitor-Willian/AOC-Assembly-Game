@@ -34,7 +34,7 @@ BOXREI_L equ 20     ; largura da hitbox
 WALL1_X equ 0       ; obstaculo teste
 WALL1_Y equ 0
 WALL1_A equ 450
-WALL1_L equ 30
+WALL1_L equ 40
 
 WALL2_X equ 0       
 WALL2_Y equ 0
