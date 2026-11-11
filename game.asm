@@ -93,7 +93,7 @@ section .bss
     walk_delay    equ 8    ; trocar de frame a cada X quadros
     rei_x         resd 1   ; posisão x hitbox
     rei_y         resd 1   ; posisão y hitbox
-    atk_dir       resd 1   ; direção do ataque (0=esquerda, 1=direita, 2=cima, 3=baixo)
+    atk_dir       resd 1   ; direção do ataque (0= não, 1=esquerda, 2=direita, 3=cima, 4=baixo)
 
 section .text
 ; Pilha em main:
@@ -152,6 +152,23 @@ main:
     lea  rdi, [reiC2_bmp]
     call CarregarTextura
     mov  [king_walk + 8], rax     ; +8: segundo ponteiro do array
+
+    ; ataque
+    lea rdi, [reiAUp_bmp]
+    call CarregarTextura
+    mov [king_atk_u], rax
+
+    lea rdi, [reiADwn_bmp]
+    call CarregarTextura
+    mov [king_atk_d], rax
+
+    lea rdi, [reiAEsq_bmp]
+    call CarregarTextura
+    mov [king_atk_l], rax
+
+    lea rdi, [reiADir_bmp]
+    call CarregarTextura
+    mov [king_atk_r], rax
 
     ; pega o tamanho real da imagem, para não distorcer o sprite
     mov  rdi, r14
@@ -221,21 +238,24 @@ main:
 .sem_d:
 
     ; ---- atualiza a direção do ataque ----
+
+    mov dword [atk_dir], 0
+    
     cmp  byte [r13 + SC_LEFT], 0
     je   .sem_left
-    mov  dword [atk_dir], 0        ; esquerda
+    mov  dword [atk_dir], 1        ; esquerda
 .sem_left:
     cmp  byte [r13 + SC_RIGHT], 0
     je   .sem_right
-    mov  dword [atk_dir], 1        ; direita
+    mov  dword [atk_dir], 2        ; direita
 .sem_right:
     cmp  byte [r13 + SC_UP], 0
     je   .sem_up
-    mov  dword [atk_dir], 2        ; cima
+    mov  dword [atk_dir], 3        ; cima
 .sem_up:
     cmp  byte [r13 + SC_DOWN], 0
     je   .sem_down
-    mov  dword [atk_dir], 3        ; baixo
+    mov  dword [atk_dir], 4        ; baixo
 .sem_down:
 
     ; ---- limita x entre 0 e W - largura ----
@@ -332,9 +352,37 @@ main:
         mov  dword [movendo], 1
 
 .animacao:
-    ; lógica de animação aqui
-    ; por exemplo, alternar entre texturas diferentes
-    ; para simular movimento
+
+.verificar_ataque:
+    cmp  dword [atk_dir], 0
+    jne  .atacando
+    jmp  .verificar_movimento
+
+.atacando:
+    mov  eax, [atk_dir]
+    cmp  eax, 1
+    je   .atk_esq
+    cmp  eax, 2
+    je   .atk_dir
+    cmp  eax, 3
+    je   .atk_up
+    cmp  eax, 4
+    je   .atk_down
+
+.atk_esq:
+    mov  r14, [king_atk_l]
+    jmp  .desenha
+.atk_dir:
+    mov  r14, [king_atk_r]
+    jmp  .desenha
+.atk_up:
+    mov  r14, [king_atk_u]
+    jmp  .desenha
+.atk_down:
+    mov  r14, [king_atk_d]
+    jmp  .desenha
+
+.verificar_movimento:
     cmp  dword [movendo], 0
     jne  .andando
 
