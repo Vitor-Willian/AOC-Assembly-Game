@@ -63,12 +63,12 @@ CAMP_L  equ 25
 
 section .data
     titulo      db "Sprite", 0
-    rei_bmp db "Rei.bmp", 0
-    reiC1_bmp db "Rei C1.bmp", 0
-    reiC2_bmp db "Rei C2.bmp", 0
+    rei_bmp db "assets/sprites/Rei.bmp", 0
+    reiC1_bmp db "assets/sprites/Rei C1.bmp", 0
+    reiC2_bmp db "assets/sprites/Rei C2.bmp", 0
     modo_leitura db "rb", 0
     img_mode db "rb", 0
-    img_file db "chao.bmp", 0 
+    img_file db "assets/background/chao.bmp", 0 
 
 section .bss
     tex_w         resd 1   ; largura da imagem (preenchido por SDL_QueryTexture)
