@@ -27,6 +27,10 @@ SC_W   equ 26       ; scancodes (posição física da tecla)
 SC_A   equ 4
 SC_S   equ 22
 SC_D   equ 7
+SC_LEFT  equ 80
+SC_RIGHT equ 79
+SC_UP    equ 82
+SC_DOWN  equ 81
 
 BOXREI_A equ 30     ; altura da hitbox do rei 
 BOXREI_L equ 20     ; largura da hitbox
@@ -62,10 +66,14 @@ CAMP_A  equ 15
 CAMP_L  equ 25
 
 section .data
-    titulo      db "Sprite", 0
+    titulo      db "O Retorno do Rei", 0
     rei_bmp db "assets/sprites/Rei.bmp", 0
     reiC1_bmp db "assets/sprites/Rei C1.bmp", 0
     reiC2_bmp db "assets/sprites/Rei C2.bmp", 0
+    reiAUp_bmp db "assets/sprites/Rei Atk Up.bmp", 0
+    reiADwn_bmp db "assets/sprites/Rei Atk Dwn.bmp", 0
+    reiAEsq_bmp db "assets/sprites/Rei Atk Esq.bmp", 0
+    reiADir_bmp db "assets/sprites/Rei Atk Dir.bmp", 0
     modo_leitura db "rb", 0
     img_mode db "rb", 0
     img_file db "assets/background/chao.bmp", 0 
@@ -74,6 +82,10 @@ section .bss
     tex_w         resd 1   ; largura da imagem (preenchido por SDL_QueryTexture)
     tex_h         resd 1   ; altura da imagem
     king_idle     resq 1   ; textura do Rei.bmp (sprite parado)
+    king_atk_u    resq 1   ; textura do Rei Atk Up.bmp (ataque para cima)
+    king_atk_d    resq 1   ; textura do Rei Atk Dwn.bmp (ataque para baixo)
+    king_atk_l    resq 1   ; textura do Rei Atk Esq.bmp (ataque para esquerda)
+    king_atk_r    resq 1  ; textura do Rei Atk Dir.bmp (ataque para direita)
     king_walk     resq 2   ; [0] = Rei C.bmp, [1] = Rei C2.bmp
     frame_atual   resd 1   ; 0 ou 1 (qual das duas está ativa)
     cont_anim     resd 1   ; quadros passados desde a última troca
@@ -81,6 +93,7 @@ section .bss
     walk_delay    equ 8    ; trocar de frame a cada X quadros
     rei_x         resd 1   ; posisão x hitbox
     rei_y         resd 1   ; posisão y hitbox
+    atk_dir       resd 1   ; direção do ataque (0=esquerda, 1=direita, 2=cima, 3=baixo)
 
 section .text
 ; Pilha em main:
@@ -187,6 +200,8 @@ main:
 .teclado:
     mov  r8d, [rei_x]              ; x antigo (antes era rsp+64) 
     mov  r9d, [rei_y]              ; y antigo (rsp+68)
+    mov  r10d, [atk_dir]           ; direção do ataque
+
     ; ---- lê as teclas e altera x, y ----
     cmp  byte [r13 + SC_W], 0
     je   .sem_w
@@ -204,6 +219,24 @@ main:
     je   .sem_d
     add  dword [rei_x], VEL        ; D: direita (x aumenta)
 .sem_d:
+
+    ; ---- atualiza a direção do ataque ----
+    cmp  byte [r13 + SC_LEFT], 0
+    je   .sem_left
+    mov  dword [atk_dir], 0        ; esquerda
+.sem_left:
+    cmp  byte [r13 + SC_RIGHT], 0
+    je   .sem_right
+    mov  dword [atk_dir], 1        ; direita
+.sem_right:
+    cmp  byte [r13 + SC_UP], 0
+    je   .sem_up
+    mov  dword [atk_dir], 2        ; cima
+.sem_up:
+    cmp  byte [r13 + SC_DOWN], 0
+    je   .sem_down
+    mov  dword [atk_dir], 3        ; baixo
+.sem_down:
 
     ; ---- limita x entre 0 e W - largura ----
     mov  eax, [rei_x]
