@@ -21,7 +21,7 @@ SDLK_ESCAPE                   equ 27
 W equ 800
 H equ 450
 
-VEL    equ 4        ; velocidade em pixels por quadro
+VEL    equ 2         ; velocidade em pixels por quadro
 SC_W   equ 26       ; scancodes (posição física da tecla)
 SC_A   equ 4
 SC_S   equ 22
