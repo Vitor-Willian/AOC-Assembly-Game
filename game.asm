@@ -31,6 +31,10 @@ SC_D   equ 7
 BOXREI_A equ 30     ; altura da hitbox do rei 
 BOXREI_L equ 20     ; largura da hitbox
 
+; Centro visivel do frame 1 dentro da imagem de 200 x 225 (inclui margens).
+BOSS_CENTRO_X equ 116
+BOSS_CENTRO_Y equ 74
+
 WALL1_X equ 0       ; obstaculo teste
 WALL1_Y equ 0
 WALL1_A equ 450
@@ -66,6 +70,9 @@ section .data
     rei_bmp db "Rei.bmp", 0
     reiC1_bmp db "Rei C1.bmp", 0
     reiC2_bmp db "Rei C2.bmp", 0
+    boss_bmp db "assets/sprites/boss1/Frame1boss.bmp", 0
+    ; Posicao da imagem completa; o corpo comeca 88 px a direita e 41 px abaixo.
+    boss_rect dd 284, 60, 0, 0    ; x, y, largura, altura (tamanho original)
     modo_leitura db "rb", 0
     img_mode db "rb", 0
     img_file db "chao.bmp", 0 
@@ -74,6 +81,8 @@ section .bss
     tex_w         resd 1   ; largura da imagem (preenchido por SDL_QueryTexture)
     tex_h         resd 1   ; altura da imagem
     king_idle     resq 1   ; textura do Rei.bmp (sprite parado)
+    boss_idle     resq 1   ; textura do primeiro frame do boss
+    boss_meio_passo resd 1 ; acumula a metade de pixel restante entre quadros
     king_walk     resq 2   ; [0] = Rei C.bmp, [1] = Rei C2.bmp
     frame_atual   resd 1   ; 0 ou 1 (qual das duas está ativa)
     cont_anim     resd 1   ; quadros passados desde a última troca
@@ -139,6 +148,18 @@ main:
     lea  rdi, [reiC2_bmp]
     call CarregarTextura
     mov  [king_walk + 8], rax     ; +8: segundo ponteiro do array
+
+    ; Frame padrao do boss, usado parado e em movimento no tamanho original.
+    lea  rdi, [boss_bmp]
+    call CarregarTextura
+    mov  [boss_idle], rax
+
+    mov  rdi, rax
+    xor  esi, esi
+    xor  edx, edx
+    lea  rcx, [boss_rect + 8]
+    lea  r8, [boss_rect + 12]
+    call SDL_QueryTexture
 
     ; pega o tamanho real da imagem, para não distorcer o sprite
     mov  rdi, r14
@@ -299,6 +320,8 @@ main:
         mov  dword [movendo], 1
 
 .animacao:
+    call MovimentarBoss
+
     ; lógica de animação aqui
     ; por exemplo, alternar entre texturas diferentes
     ; para simular movimento
@@ -331,6 +354,13 @@ main:
     mov rsi, r15
     xor edx, edx
     xor ecx, ecx
+    call SDL_RenderCopy
+
+    ; Desenha o boss sobre o cenario, antes do personagem.
+    mov  rdi, r12
+    mov  rsi, [boss_idle]
+    xor  edx, edx
+    lea  rcx, [boss_rect]
     call SDL_RenderCopy
 
     mov eax, [rei_x]            ; hitbox largura
@@ -445,6 +475,8 @@ main:
     jmp  .loop
 
 .fim:
+    mov  rdi, [boss_idle]
+    call SDL_DestroyTexture
     mov  rdi, r15
     call SDL_DestroyTexture
     mov  rdi, [king_idle]
@@ -466,6 +498,38 @@ main:
     pop  r12
     pop  rbx
     xor  eax, eax
+    ret
+
+; Persegue o centro do jogador, com metade de VEL em cada eixo.
+; Usa apenas registradores temporarios e mantem o primeiro sprite.
+MovimentarBoss:
+    mov  ecx, [boss_meio_passo]
+    add  ecx, VEL
+    mov  eax, ecx
+    and  eax, 1
+    mov  [boss_meio_passo], eax
+    shr  ecx, 1                 ; VEL=3: passos de 1, 2, 1, 2... pixels
+    mov  edx, ecx
+    neg  edx                    ; limite negativo do passo
+
+    ; Limita o deslocamento a [-passo, +passo], sem ultrapassar o alvo.
+    mov  eax, [rei_x]
+    add  eax, BOXREI_L / 2 - BOSS_CENTRO_X
+    sub  eax, [boss_rect]
+    cmp  eax, ecx
+    cmovg eax, ecx
+    cmp  eax, edx
+    cmovl eax, edx
+    add  [boss_rect], eax
+
+    mov  eax, [rei_y]
+    add  eax, BOXREI_A / 2 - BOSS_CENTRO_Y
+    sub  eax, [boss_rect + 4]
+    cmp  eax, ecx
+    cmovg eax, ecx
+    cmp  eax, edx
+    cmovl eax, edx
+    add  [boss_rect + 4], eax
     ret
 
 TestaColisao:
