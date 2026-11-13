@@ -31,6 +31,9 @@ SC_D   equ 7
 BOXREI_A equ 30     ; altura da hitbox do rei 
 BOXREI_L equ 20     ; largura da hitbox
 
+BOSS_HITBOX_L equ 20  
+BOSS_HITBOX_A equ 50
+
 ; Centro visivel do frame 1 dentro da imagem de 200 x 225 (inclui margens).
 BOSS_CENTRO_X equ 116
 BOSS_CENTRO_Y equ 74
@@ -275,6 +278,16 @@ main:
 .y_max_ok:
     mov  [rei_y], eax
 
+    mov edi, dword [boss_rect]       ; X do boss
+    add edi, 105                     ; ajuste x
+    mov esi, dword [boss_rect + 4]   ; Y do boss
+    add esi, 40                      ; ajuste y
+    mov edx, BOSS_HITBOX_L
+    mov ecx, BOSS_HITBOX_A
+    call TestaColisao
+    cmp rax, 1
+    je .houve_colisao
+
     mov edi, WALL1_X        
     mov esi, WALL1_Y
     mov edx, WALL1_L
@@ -383,7 +396,7 @@ main:
     xor  edx, edx
     lea  rcx, [boss_rect]
     call SDL_RenderCopy
-
+ 
     mov eax, [rei_x]            ; hitbox largura
     mov [rsp+64], eax
 
@@ -417,6 +430,20 @@ main:
     lea rsi, [rsp+64]            
     call SDL_RenderDrawRect
 
+    mov eax, dword [boss_rect]
+    add eax, 105                 ; ajuste do X     
+    mov dword [rsp+64], eax
+    mov eax, dword [boss_rect + 4]
+    add eax, 40                  ; ajsute do y    
+    mov dword [rsp+68], eax
+
+    mov dword [rsp+72], BOSS_HITBOX_L 
+    mov dword [rsp+76], BOSS_HITBOX_A
+
+    mov rdi, r12
+    lea rsi, [rsp+64]
+    call SDL_RenderDrawRect
+    
     ; parede verde
     mov rdi, r12
     xor esi, esi            ; R = 0
@@ -524,6 +551,9 @@ main:
 ; Persegue o centro do jogador, com metade de VEL em cada eixo.
 ; Usa apenas registradores temporarios e mantem o primeiro sprite.
 MovimentarBoss:
+    mov r8d, dword [boss_rect]          ; posição anterior 
+    mov r9d, dword [boss_rect + 4]
+
     mov  ecx, [boss_meio_passo]
     add  ecx, VEL
     mov  eax, ecx
@@ -551,7 +581,23 @@ MovimentarBoss:
     cmp  eax, edx
     cmovl eax, edx
     add  [boss_rect + 4], eax
-    ret
+
+    mov edi, dword [boss_rect]
+    add edi, 105
+    mov esi, dword [boss_rect + 4]
+    add esi, 40
+    mov edx, BOSS_HITBOX_L
+    mov ecx, BOSS_HITBOX_A
+    call TestaColisao
+    
+    cmp rax, 1
+    jne .passo_ok
+    
+    mov dword [boss_rect], r8d          ;volta pra posição anterior
+    mov dword [boss_rect + 4], r9d
+
+    .passo_ok:
+        ret
 
 TestaColisao:
     mov eax, [rei_x]            ; pega x do rei
