@@ -431,12 +431,12 @@ main:
     call SDL_RenderCopy
 
     ; x = posição do rei + metade da diferença de largura
-mov eax, [rei_x]
-mov ecx, [idle_w]
-sub ecx, [tex_w]
-sar ecx, 1
-add eax, ecx
-mov [rsp+64], eax
+    mov eax, [rei_x]
+    mov ecx, [idle_w]
+    sub ecx, [tex_w]
+    sar ecx, 1
+    add eax, ecx
+    mov [rsp+64], eax
 
     ; y = posição do rei + metade da diferença de altura
     mov eax, [rei_y]
@@ -467,8 +467,19 @@ mov [rsp+64], eax
     mov r8d, 255
     call SDL_SetRenderDrawColor
 
-    mov dword [rsp+72], BOXREI_L        
-    mov dword [rsp+76], BOXREI_A        
+    ; Hitbox deve usar rei_x/rei_y, não a posição ajustada do sprite
+    mov eax, [rei_x]
+    mov [rsp+64], eax
+
+    mov eax, [rei_y]
+    mov [rsp+68], eax
+
+    mov dword [rsp+72], BOXREI_L
+    mov dword [rsp+76], BOXREI_A
+
+    mov rdi, r12
+    lea rsi, [rsp+64]
+    call SDL_RenderDrawRect       
 
     mov rdi, r12
     lea rsi, [rsp+64]            
