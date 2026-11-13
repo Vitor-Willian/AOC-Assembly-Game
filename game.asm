@@ -81,6 +81,8 @@ section .data
 section .bss
     tex_w         resd 1   ; largura da imagem (preenchido por SDL_QueryTexture)
     tex_h         resd 1   ; altura da imagem
+    idle_w        resd 1   ; largura do sprite parado
+    idle_h        resd 1   ; altura do sprite parado
     king_idle     resq 1   ; textura do Rei.bmp (sprite parado)
     king_atk_u    resq 1   ; textura do Rei Atk Up.bmp (ataque para cima)
     king_atk_d    resq 1   ; textura do Rei Atk Dwn.bmp (ataque para baixo)
@@ -179,6 +181,12 @@ main:
     call SDL_QueryTexture
 
     ; monta o retângulo de destino: centralizado, com o tamanho da imagem
+    mov eax, [tex_w]
+    mov [idle_w], eax            ; guarda largura do sprite parado
+
+    mov eax, [tex_h]
+    mov [idle_h], eax            ; guarda altura do sprite parado
+
     mov  eax, [tex_w]
     mov  r9d, W
     sub  r9d, eax
@@ -405,6 +413,14 @@ main:
     mov  r14, [rcx + rax*8]         ; r14 = textura do frame atual
 
 .desenha:
+    ; Obtém o tamanho do sprite atual
+    mov  rdi, r14
+    xor  esi, esi
+    xor  edx, edx
+    lea  rcx, [tex_w]
+    lea  r8,  [tex_h]
+    call SDL_QueryTexture
+
     mov  rdi, r12 
     call SDL_RenderClear
 
@@ -414,12 +430,23 @@ main:
     xor ecx, ecx
     call SDL_RenderCopy
 
-    mov eax, [rei_x]            ; hitbox largura
-    mov [rsp+64], eax
+    ; x = posição do rei + metade da diferença de largura
+mov eax, [rei_x]
+mov ecx, [idle_w]
+sub ecx, [tex_w]
+sar ecx, 1
+add eax, ecx
+mov [rsp+64], eax
 
-    mov eax, [rei_y]            ; hitbox altura
+    ; y = posição do rei + metade da diferença de altura
+    mov eax, [rei_y]
+    mov ecx, [idle_h]
+    sub ecx, [tex_h]
+    sar ecx, 1
+    add eax, ecx
     mov [rsp+68], eax
 
+    ; desenha usando o tamanho real do sprite atual
     mov eax, [tex_w]
     mov [rsp+72], eax
 
