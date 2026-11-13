@@ -65,6 +65,8 @@ CAMP_Y  equ 245
 CAMP_A  equ 15
 CAMP_L  equ 25
 
+SWIPE_DIST equ 2
+
 section .data
     titulo      db "O Retorno do Rei", 0
     rei_bmp db "assets/sprites/Rei.bmp", 0
@@ -74,6 +76,10 @@ section .data
     reiADwn_bmp db "assets/sprites/Rei Atk Dwn.bmp", 0
     reiAEsq_bmp db "assets/sprites/Rei Atk Esq.bmp", 0
     reiADir_bmp db "assets/sprites/Rei Atk Dir.bmp", 0
+    atk_swipeUp db "assets/effects/Atk Swipe Up.bmp", 0
+    atk_swipeDwn db "assets/effects/Atk Swipe Dwn.bmp", 0
+    atk_swipeEsq db "assets/effects/Atk Swipe Esq.bmp", 0
+    atk_swipeDir db "assets/effects/Atk Swipe Dir.bmp", 0
     modo_leitura db "rb", 0
     img_mode db "rb", 0
     img_file db "assets/background/chao.bmp", 0 
@@ -83,22 +89,33 @@ section .bss
     tex_h         resd 1   ; altura da imagem
     idle_w        resd 1   ; largura do sprite parado
     idle_h        resd 1   ; altura do sprite parado
+
     king_idle     resq 1   ; textura do Rei.bmp (sprite parado)
     king_atk_u    resq 1   ; textura do Rei Atk Up.bmp (ataque para cima)
     king_atk_d    resq 1   ; textura do Rei Atk Dwn.bmp (ataque para baixo)
     king_atk_l    resq 1   ; textura do Rei Atk Esq.bmp (ataque para esquerda)
     king_atk_r    resq 1  ; textura do Rei Atk Dir.bmp (ataque para direita)
     king_walk     resq 2   ; [0] = Rei C.bmp, [1] = Rei C2.bmp
+
     frame_atual   resd 1   ; 0 ou 1 (qual das duas está ativa)
     cont_anim     resd 1   ; quadros passados desde a última troca
     movendo       resd 1   ; 0 = parado, 1 = se moveu neste quadro
     walk_delay    equ 8    ; trocar de frame a cada X quadros
+
     rei_x         resd 1   ; posisão x hitbox
     rei_y         resd 1   ; posisão y hitbox
+
     atk_dir       resd 1   ; direção do ataque (0= não, 1=esquerda, 2=direita, 3=cima, 4=baixo)
     atacou        resd 1   ; 0 = não atacou, 1 = atacou
     atk_fr        equ 12   ; frames que o ataque dura (1/60s cada)
-    ataque_timer resd 1    ; 
+    ataque_timer resd 1    ; conta quantos frames faltam para terminar o ataque
+
+    atk_swipe_u    resq 1   ; textura do efeito de ataque para cima
+    atk_swipe_d    resq 1   ; textura do efeito de ataque para baixo
+    atk_swipe_l    resq 1   ; textura do efeito de ataque para esquerda
+    atk_swipe_r    resq 1   ; textura do efeito de ataque para direita
+    swipe_atual    resq 1   ; textura do efeito de ataque atual (usada no desenho)
+
 section .text
 ; Pilha em main:
 ; [rsp+0  .. rsp+63] SDL_Event
@@ -173,6 +190,22 @@ main:
     lea rdi, [reiADir_bmp]
     call CarregarTextura
     mov [king_atk_r], rax
+
+    lea  rdi, [atk_swipeUp]
+    call CarregarTextura
+    mov  [atk_swipe_u], rax
+
+    lea rdi, [atk_swipeDwn]
+    call CarregarTextura
+    mov  [atk_swipe_d], rax
+
+    lea rdi, [atk_swipeEsq]
+    call CarregarTextura
+    mov  [atk_swipe_l], rax
+
+    lea rdi, [atk_swipeDir]
+    call CarregarTextura
+    mov  [atk_swipe_r], rax
 
     ; pega o tamanho real da imagem, para não distorcer o sprite
     mov  rdi, r14
@@ -426,18 +459,27 @@ main:
 
 .atk_esq:
     mov  r14, [king_atk_l]
+    mov rax, [atk_swipe_l]
+    mov [swipe_atual], rax
     jmp  .desenha
 .atk_dir:
     mov  r14, [king_atk_r]
+    mov rax, [atk_swipe_r]
+    mov [swipe_atual], rax
     jmp  .desenha
 .atk_up:
     mov  r14, [king_atk_u]
+    mov rax, [atk_swipe_u]
+    mov [swipe_atual], rax
     jmp  .desenha
 .atk_down:
     mov  r14, [king_atk_d]
+    mov rax, [atk_swipe_d]
+    mov [swipe_atual], rax
     jmp  .desenha
 
 .verificar_movimento:
+    mov qword [swipe_atual], 0
     cmp  dword [movendo], 0
     jne  .andando
 
@@ -505,6 +547,125 @@ main:
     xor  edx, edx                 ; srcrect = NULL -> usa a imagem inteira
     lea  rcx, [rsp+64]            ; dstrect
     call SDL_RenderCopy
+
+    ; Se houver swipe, desenha o efeito de ataque
+    cmp qword [swipe_atual], 0
+    je .sem_swipe
+
+    mov r14, [swipe_atual]
+
+    mov rdi, r14
+    xor esi, esi
+    xor edx, edx
+    lea rcx, [tex_w]
+    lea r8, [tex_h]
+    call SDL_QueryTexture
+
+; Define a posição do swipe conforme a direção
+    cmp dword [atk_dir], 1
+    je .pos_swipe_esq
+
+    cmp dword [atk_dir], 2
+    je .pos_swipe_dir
+
+    cmp dword [atk_dir], 3
+    je .pos_swipe_up
+
+    ; Caso restante: ataque para baixo
+    jmp .pos_swipe_down
+
+
+.pos_swipe_esq:
+    ; x = rei_x - largura_swipe - distância
+    mov eax, [rei_x]
+    sub eax, [tex_w]
+    sub eax, SWIPE_DIST
+    mov [rsp+64], eax
+
+    ; y centralizado
+    mov eax, [rei_y]
+
+    mov ecx, BOXREI_A
+    sub ecx, [tex_h]
+    sar ecx, 1
+
+    add eax, ecx
+    mov [rsp+68], eax
+    jmp .tamanho_swipe
+
+
+.pos_swipe_dir:
+    ; x = rei_x + largura_hitbox + distância
+    mov eax, [rei_x]
+    add eax, BOXREI_L
+    add eax, SWIPE_DIST
+    mov [rsp+64], eax
+
+    ; y centralizado
+    mov eax, [rei_y]
+
+    mov ecx, BOXREI_A
+    sub ecx, [tex_h]
+    sar ecx, 1
+
+    add eax, ecx
+    mov [rsp+68], eax
+    jmp .tamanho_swipe
+
+
+.pos_swipe_up:
+    ; x centralizado
+    mov eax, [rei_x]
+
+    mov ecx, BOXREI_L
+    sub ecx, [tex_w]
+    sar ecx, 1
+
+    add eax, ecx
+    mov [rsp+64], eax
+    mov [rsp+64], eax
+
+    ; y = rei_y - altura_swipe - distância
+    mov eax, [rei_y]
+    sub eax, [tex_h]
+    sub eax, SWIPE_DIST
+    mov [rsp+68], eax
+    jmp .tamanho_swipe
+
+
+.pos_swipe_down:
+    ; x centralizado
+    mov eax, [rei_x]
+
+    mov ecx, BOXREI_L
+    sub ecx, [tex_w]
+    sar ecx, 1
+
+    add eax, ecx
+    mov [rsp+64], eax
+
+    ; y = rei_y + altura_hitbox + distância
+    mov eax, [rei_y]
+    add eax, BOXREI_A
+    add eax, SWIPE_DIST
+    mov [rsp+68], eax
+
+
+.tamanho_swipe:
+    mov eax, [tex_w]
+    mov [rsp+72], eax
+
+    mov eax, [tex_h]
+    mov [rsp+76], eax
+
+    ; Desenha o swipe
+    mov rdi, r12
+    mov rsi, r14
+    xor edx, edx
+    lea rcx, [rsp+64]
+    call SDL_RenderCopy
+
+.sem_swipe:
 
     ; 1. Define a cor do "pincel" do SDL para Vermelho (R=255, G=0, B=0, Alpha=255)
     mov rdi, r12
