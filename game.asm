@@ -48,15 +48,20 @@ WALL2_Y equ 0
 WALL2_A equ 30
 WALL2_L equ 800
 
-WALL3_X equ 770     
-WALL3_Y equ 0
-WALL3_A equ 450
-WALL3_L equ 30
+WALL3_X equ 0       
+WALL3_Y equ 420
+WALL3_A equ 30
+WALL3_L equ 800
 
-WALL4_X equ 0       
-WALL4_Y equ 420
-WALL4_A equ 30
-WALL4_L equ 800
+WALL4_X equ 770     
+WALL4_Y equ 0
+WALL4_A equ 210
+WALL4_L equ 30
+
+WALL5_X equ 770     
+WALL5_Y equ 250
+WALL5_A equ 225
+WALL5_L equ 30
 
 ROCK_X  equ 54
 ROCK_Y  equ 69
@@ -320,6 +325,14 @@ main:
     cmp rax, 1
     je .houve_colisao
 
+    mov edi, WALL5_X
+    mov esi, WALL5_Y
+    mov edx, WALL5_L
+    mov ecx, WALL5_A
+    call TestaColisao
+    cmp rax, 1
+    je .houve_colisao
+
     mov edi, ROCK_X
     mov esi, ROCK_Y
     mov edx, ROCK_L
@@ -484,6 +497,15 @@ main:
     mov dword [rsp+68], WALL4_Y
     mov dword [rsp+72], WALL4_L
     mov dword [rsp+76], WALL4_A
+
+    mov rdi, r12
+    lea rsi, [rsp+64]
+    call SDL_RenderDrawRect
+
+    mov dword [rsp+64], WALL5_X
+    mov dword [rsp+68], WALL5_Y
+    mov dword [rsp+72], WALL5_L
+    mov dword [rsp+76], WALL5_A
 
     mov rdi, r12
     lea rsi, [rsp+64]
