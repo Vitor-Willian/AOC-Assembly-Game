@@ -76,6 +76,8 @@ section .data
     modo_leitura db "rb", 0
     img_mode db "rb", 0
     img_file db "chao.bmp", 0 
+    img_file2 db "chao960.bmp", 0       ; novo mapa
+    cena_atual db 0
 
 section .bss
     tex_w         resd 1   ; largura da imagem (preenchido por SDL_QueryTexture)
@@ -236,11 +238,30 @@ main:
     sub  ecx, BOXREI_L               ; x máximo trocado [tex_w] -> BOXREI_L
     cmp  eax, ecx
     jle  .x_max_ok
+    cmp byte [cena_atual], 0        
+    je .trocar_cena2
     mov  eax, ecx                   ; passou da direita: x = máximo
+    jmp .x_max_ok
+
+    .trocar_cena2:
+        mov byte [cena_atual], 1        ; troca o byte do mapa
+        mov eax, 100                    ; Posiciona o rei na borda do outro lado
+        mov [rei_x], eax                 
+
+        mov rdi, r15                     
+        call SDL_DestroyTexture          
+        
+        lea rdi, [img_file2]            
+        call CarregarTextura             
+        mov r15, rax                     
+        
+        jmp .y_limit_start               
+
 .x_max_ok:
     mov  [rei_x], eax
 
     ; ---- limita y entre 0 e H - altura ----
+.y_limit_start:  
     mov  eax, [rei_y]
     test eax, eax
     jge  .y_min_ok
