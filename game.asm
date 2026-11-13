@@ -96,7 +96,9 @@ section .bss
     rei_x         resd 1   ; posisão x hitbox
     rei_y         resd 1   ; posisão y hitbox
     atk_dir       resd 1   ; direção do ataque (0= não, 1=esquerda, 2=direita, 3=cima, 4=baixo)
-
+    atacou        resd 1   ; 0 = não atacou, 1 = atacou
+    atk_fr        equ 12   ; frames que o ataque dura (1/60s cada)
+    ataque_timer resd 1    ; 
 section .text
 ; Pilha em main:
 ; [rsp+0  .. rsp+63] SDL_Event
@@ -247,24 +249,69 @@ main:
 
     ; ---- atualiza a direção do ataque ----
 
+; Verifica se alguma seta está pressionada
+    mov eax, 0
+    cmp byte [r13 + SC_LEFT], 0
+    jne .tem_seta
+    cmp byte [r13 + SC_RIGHT], 0
+    jne .tem_seta
+    cmp byte [r13 + SC_UP], 0
+    jne .tem_seta
+    cmp byte [r13 + SC_DOWN], 0
+    jne .tem_seta
+
+    ; Nenhuma seta pressionada:
+    ; permite um novo ataque
     mov dword [atk_dir], 0
-    
-    cmp  byte [r13 + SC_LEFT], 0
-    je   .sem_left
-    mov  dword [atk_dir], 1        ; esquerda
-.sem_left:
-    cmp  byte [r13 + SC_RIGHT], 0
-    je   .sem_right
-    mov  dword [atk_dir], 2        ; direita
-.sem_right:
-    cmp  byte [r13 + SC_UP], 0
-    je   .sem_up
-    mov  dword [atk_dir], 3        ; cima
-.sem_up:
-    cmp  byte [r13 + SC_DOWN], 0
-    je   .sem_down
-    mov  dword [atk_dir], 4        ; baixo
-.sem_down:
+    mov dword [atacou], 0
+    mov dword [ataque_timer], 0
+    jmp .fim_ataque
+
+.tem_seta:
+    ; Se já atacou nesta pressionada, fica no idle
+    cmp dword [atacou], 1
+    je .ja_atacou
+
+    ; Escolhe a direção do ataque
+    cmp byte [r13 + SC_LEFT], 0
+    je .verifica_direita
+    mov dword [atk_dir], 1
+    jmp .marca_ataque
+
+.verifica_direita:
+    cmp byte [r13 + SC_RIGHT], 0
+    je .verifica_cima
+    mov dword [atk_dir], 2
+    jmp .marca_ataque
+
+.verifica_cima:
+    cmp byte [r13 + SC_UP], 0
+    je .verifica_baixo
+    mov dword [atk_dir], 3
+    jmp .marca_ataque
+
+.verifica_baixo:
+    mov dword [atk_dir], 4
+
+.marca_ataque:
+    mov dword [atacou], 1
+    mov dword [ataque_timer], atk_fr
+    jmp .fim_ataque
+
+.ja_atacou:
+    cmp dword [ataque_timer], 0
+    je  .termina_ataque
+
+    dec dword [ataque_timer]
+    ; Mantém atk_dir diferente de zero,
+    ; portanto continua mostrando o ataque
+    jmp .fim_ataque
+
+.termina_ataque:
+    mov dword [atk_dir], 0
+
+.fim_ataque:
+
 
     ; ---- limita x entre 0 e W - largura ----
     mov  eax, [rei_x]
