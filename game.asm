@@ -98,7 +98,6 @@ section .data
     modo_leitura db "rb", 0
     img_mode db "rb", 0
     img_file db "assets/background/chao.bmp", 0 
-    img_file db "chao.bmp", 0 
     img_file2 db "chao960.bmp", 0       ; novo mapa
     cena_atual db 0
 
