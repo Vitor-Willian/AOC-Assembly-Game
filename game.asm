@@ -108,13 +108,14 @@ section .bss
     atk_dir       resd 1   ; direção do ataque (0= não, 1=esquerda, 2=direita, 3=cima, 4=baixo)
     atacou        resd 1   ; 0 = não atacou, 1 = atacou
     atk_fr        equ 12   ; frames que o ataque dura (1/60s cada)
-    ataque_timer resd 1    ; conta quantos frames faltam para terminar o ataque
+    ataque_timer  resd 1    ; conta quantos frames faltam para terminar o ataque
 
     atk_swipe_u    resq 1   ; textura do efeito de ataque para cima
     atk_swipe_d    resq 1   ; textura do efeito de ataque para baixo
     atk_swipe_l    resq 1   ; textura do efeito de ataque para esquerda
     atk_swipe_r    resq 1   ; textura do efeito de ataque para direita
     swipe_atual    resq 1   ; textura do efeito de ataque atual (usada no desenho)
+    atk_hitbox     resd 4   ; hitbox do ataque (x, y, w, h)
 
 section .text
 ; Pilha em main:
@@ -341,6 +342,13 @@ main:
     jmp .fim_ataque
 
 .termina_ataque:
+    mov dword [atk_dir], 0
+    mov qword [swipe_atual], 0
+    mov dword [atk_hitbox], 0
+    mov dword [atk_hitbox + 4], 0
+    mov dword [atk_hitbox + 8], 0
+    mov dword [atk_hitbox + 12], 0
+
     mov dword [atk_dir], 0
 
 .fim_ataque:
@@ -652,11 +660,20 @@ main:
 
 
 .tamanho_swipe:
+    mov eax, [rsp+64]
+    mov [atk_hitbox], eax
+
+    mov eax, [rsp+68]
+    mov [atk_hitbox + 4], eax
+
+
     mov eax, [tex_w]
     mov [rsp+72], eax
+    mov [atk_hitbox + 8], eax          ; largura do swipe
 
     mov eax, [tex_h]
     mov [rsp+76], eax
+    mov [atk_hitbox + 12], eax      ; altura do swipe
 
     ; Desenha o swipe
     mov rdi, r12
@@ -666,12 +683,36 @@ main:
     call SDL_RenderCopy
 
 .sem_swipe:
+    cmp qword [swipe_atual], 0
+    je .sem_hitbox_ataque
+
+    mov eax, [atk_hitbox]
+    mov [rsp+64], eax
+    mov eax, [atk_hitbox + 4]
+    mov [rsp+68], eax
+    mov eax, [atk_hitbox + 8]
+    mov [rsp+72], eax
+    mov eax, [atk_hitbox + 12]
+    mov [rsp+76], eax
+    ; Cor do contorno do hitbox do ataque: amarelo
+    mov rdi, r12
+    mov esi, 255
+    mov edx, 255
+    mov ecx, 0
+    mov r8d, 255
+    call SDL_SetRenderDrawColor
+
+    mov rdi, r12
+    lea rsi, [rsp+64]
+    call SDL_RenderDrawRect
+
+.sem_hitbox_ataque:
 
     ; 1. Define a cor do "pincel" do SDL para Vermelho (R=255, G=0, B=0, Alpha=255)
     mov rdi, r12
-    mov esi, 255
-    xor edx, edx
+    xor esi, esi
     xor ecx, ecx
+    mov ecx, 255
     mov r8d, 255
     call SDL_SetRenderDrawColor
 
