@@ -35,6 +35,13 @@ SC_DOWN  equ 81
 BOXREI_A equ 30     ; altura da hitbox do rei 
 BOXREI_L equ 20     ; largura da hitbox
 
+BOSS_HITBOX_L equ 20  
+BOSS_HITBOX_A equ 50
+
+; Centro visivel do frame 1 dentro da imagem de 200 x 225 (inclui margens).
+BOSS_CENTRO_X equ 116
+BOSS_CENTRO_Y equ 74
+
 WALL1_X equ 0       ; obstaculo teste
 WALL1_Y equ 0
 WALL1_A equ 450
@@ -45,15 +52,20 @@ WALL2_Y equ 0
 WALL2_A equ 30
 WALL2_L equ 800
 
-WALL3_X equ 770     
-WALL3_Y equ 0
-WALL3_A equ 450
-WALL3_L equ 30
+WALL3_X equ 0       
+WALL3_Y equ 420
+WALL3_A equ 30
+WALL3_L equ 800
 
-WALL4_X equ 0       
-WALL4_Y equ 420
-WALL4_A equ 30
-WALL4_L equ 800
+WALL4_X equ 770     
+WALL4_Y equ 0
+WALL4_A equ 210
+WALL4_L equ 30
+
+WALL5_X equ 770     
+WALL5_Y equ 250
+WALL5_A equ 225
+WALL5_L equ 30
 
 ROCK_X  equ 54
 ROCK_Y  equ 69
@@ -80,9 +92,15 @@ section .data
     atk_swipeDwn db "assets/effects/Atk Swipe Dwn.bmp", 0
     atk_swipeEsq db "assets/effects/Atk Swipe Esq.bmp", 0
     atk_swipeDir db "assets/effects/Atk Swipe Dir.bmp", 0
+    boss_bmp db "assets/sprites/boss1/Frame1boss.bmp", 0
+    ; Posicao da imagem completa; o corpo comeca 88 px a direita e 41 px abaixo.
+    boss_rect dd 284, 60, 0, 0    ; x, y, largura, altura (tamanho original)
     modo_leitura db "rb", 0
     img_mode db "rb", 0
     img_file db "assets/background/chao.bmp", 0 
+    img_file db "chao.bmp", 0 
+    img_file2 db "chao960.bmp", 0       ; novo mapa
+    cena_atual db 0
 
 section .bss
     tex_w         resd 1   ; largura da imagem (preenchido por SDL_QueryTexture)
@@ -96,6 +114,9 @@ section .bss
     king_atk_l    resq 1   ; textura do Rei Atk Esq.bmp (ataque para esquerda)
     king_atk_r    resq 1  ; textura do Rei Atk Dir.bmp (ataque para direita)
     king_walk     resq 2   ; [0] = Rei C.bmp, [1] = Rei C2.bmp
+
+    boss_idle     resq 1   ; textura do primeiro frame do boss
+    boss_meio_passo resd 1 ; acumula a metade de pixel restante entre quadros
 
     frame_atual   resd 1   ; 0 ou 1 (qual das duas está ativa)
     cont_anim     resd 1   ; quadros passados desde a última troca
@@ -174,6 +195,18 @@ main:
     lea  rdi, [reiC2_bmp]
     call CarregarTextura
     mov  [king_walk + 8], rax     ; +8: segundo ponteiro do array
+
+    ; Frame padrao do boss, usado parado e em movimento no tamanho original.
+    lea  rdi, [boss_bmp]
+    call CarregarTextura
+    mov  [boss_idle], rax
+
+    mov  rdi, rax
+    xor  esi, esi
+    xor  edx, edx
+    lea  rcx, [boss_rect + 8]
+    lea  r8, [boss_rect + 12]
+    call SDL_QueryTexture
 
     ; ataque
     lea rdi, [reiAUp_bmp]
@@ -364,11 +397,30 @@ main:
     sub  ecx, BOXREI_L               ; x máximo trocado [tex_w] -> BOXREI_L
     cmp  eax, ecx
     jle  .x_max_ok
+    cmp byte [cena_atual], 0        
+    je .trocar_cena2
     mov  eax, ecx                   ; passou da direita: x = máximo
+    jmp .x_max_ok
+
+    .trocar_cena2:
+        mov byte [cena_atual], 1        ; troca o byte do mapa
+        mov eax, 100                    ; Posiciona o rei na borda do outro lado
+        mov [rei_x], eax                 
+
+        mov rdi, r15                     
+        call SDL_DestroyTexture          
+        
+        lea rdi, [img_file2]            
+        call CarregarTextura             
+        mov r15, rax                     
+        
+        jmp .y_limit_start               
+
 .x_max_ok:
     mov  [rei_x], eax
 
     ; ---- limita y entre 0 e H - altura ----
+.y_limit_start:  
     mov  eax, [rei_y]
     test eax, eax
     jge  .y_min_ok
@@ -381,6 +433,16 @@ main:
     mov  eax, ecx
 .y_max_ok:
     mov  [rei_y], eax
+
+    mov edi, dword [boss_rect]       ; X do boss
+    add edi, 105                     ; ajuste x
+    mov esi, dword [boss_rect + 4]   ; Y do boss
+    add esi, 40                      ; ajuste y
+    mov edx, BOSS_HITBOX_L
+    mov ecx, BOSS_HITBOX_A
+    call TestaColisao
+    cmp rax, 1
+    je .houve_colisao
 
     mov edi, WALL1_X        
     mov esi, WALL1_Y
@@ -410,6 +472,14 @@ main:
     mov esi, WALL4_Y
     mov edx, WALL4_L
     mov ecx, WALL4_A
+    call TestaColisao
+    cmp rax, 1
+    je .houve_colisao
+
+    mov edi, WALL5_X
+    mov esi, WALL5_Y
+    mov edx, WALL5_L
+    mov ecx, WALL5_A
     call TestaColisao
     cmp rax, 1
     je .houve_colisao
@@ -448,6 +518,8 @@ main:
         mov  dword [movendo], 1
 
 .animacao:
+    call MovimentarBoss
+
 
 .verificar_ataque:
     cmp  dword [atk_dir], 0
@@ -527,6 +599,13 @@ main:
     xor ecx, ecx
     call SDL_RenderCopy
 
+    ; Desenha o boss sobre o cenario, antes do personagem.
+    mov  rdi, r12
+    mov  rsi, [boss_idle]
+    xor  edx, edx
+    lea  rcx, [boss_rect]
+    call SDL_RenderCopy
+ 
     ; x = posição do rei + metade da diferença de largura
     mov eax, [rei_x]
     mov ecx, [idle_w]
@@ -734,6 +813,20 @@ main:
     lea rsi, [rsp+64]            
     call SDL_RenderDrawRect
 
+    mov eax, dword [boss_rect]
+    add eax, 105                 ; ajuste do X     
+    mov dword [rsp+64], eax
+    mov eax, dword [boss_rect + 4]
+    add eax, 40                  ; ajsute do y    
+    mov dword [rsp+68], eax
+
+    mov dword [rsp+72], BOSS_HITBOX_L 
+    mov dword [rsp+76], BOSS_HITBOX_A
+
+    mov rdi, r12
+    lea rsi, [rsp+64]
+    call SDL_RenderDrawRect
+    
     ; parede verde
     mov rdi, r12
     xor esi, esi            ; R = 0
@@ -779,6 +872,15 @@ main:
     lea rsi, [rsp+64]
     call SDL_RenderDrawRect
 
+    mov dword [rsp+64], WALL5_X
+    mov dword [rsp+68], WALL5_Y
+    mov dword [rsp+72], WALL5_L
+    mov dword [rsp+76], WALL5_A
+
+    mov rdi, r12
+    lea rsi, [rsp+64]
+    call SDL_RenderDrawRect
+
     mov dword [rsp+64], ROCK_X
     mov dword [rsp+68], ROCK_Y
     mov dword [rsp+72], ROCK_L
@@ -813,6 +915,8 @@ main:
     jmp  .loop
 
 .fim:
+    mov  rdi, [boss_idle]
+    call SDL_DestroyTexture
     mov  rdi, r15
     call SDL_DestroyTexture
     mov  rdi, [king_idle]
@@ -835,6 +939,57 @@ main:
     pop  rbx
     xor  eax, eax
     ret
+
+; Persegue o centro do jogador, com metade de VEL em cada eixo.
+; Usa apenas registradores temporarios e mantem o primeiro sprite.
+MovimentarBoss:
+    mov r8d, dword [boss_rect]          ; posição anterior 
+    mov r9d, dword [boss_rect + 4]
+
+    mov  ecx, [boss_meio_passo]
+    add  ecx, VEL
+    mov  eax, ecx
+    and  eax, 1
+    mov  [boss_meio_passo], eax
+    shr  ecx, 1                 ; VEL=3: passos de 1, 2, 1, 2... pixels
+    mov  edx, ecx
+    neg  edx                    ; limite negativo do passo
+
+    ; Limita o deslocamento a [-passo, +passo], sem ultrapassar o alvo.
+    mov  eax, [rei_x]
+    add  eax, BOXREI_L / 2 - BOSS_CENTRO_X
+    sub  eax, [boss_rect]
+    cmp  eax, ecx
+    cmovg eax, ecx
+    cmp  eax, edx
+    cmovl eax, edx
+    add  [boss_rect], eax
+
+    mov  eax, [rei_y]
+    add  eax, BOXREI_A / 2 - BOSS_CENTRO_Y
+    sub  eax, [boss_rect + 4]
+    cmp  eax, ecx
+    cmovg eax, ecx
+    cmp  eax, edx
+    cmovl eax, edx
+    add  [boss_rect + 4], eax
+
+    mov edi, dword [boss_rect]
+    add edi, 105
+    mov esi, dword [boss_rect + 4]
+    add esi, 40
+    mov edx, BOSS_HITBOX_L
+    mov ecx, BOSS_HITBOX_A
+    call TestaColisao
+    
+    cmp rax, 1
+    jne .passo_ok
+    
+    mov dword [boss_rect], r8d          ;volta pra posição anterior
+    mov dword [boss_rect + 4], r9d
+
+    .passo_ok:
+        ret
 
 TestaColisao:
     mov eax, [rei_x]            ; pega x do rei
