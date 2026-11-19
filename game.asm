@@ -31,12 +31,34 @@ SC_D   equ 7
 BOXREI_A equ 30     ; altura da hitbox do rei 
 BOXREI_L equ 20     ; largura da hitbox
 
-BOSS_HITBOX_L equ 20  
+BOSS_HITBOX_L equ 30  
 BOSS_HITBOX_A equ 50
 
 ; Centro visivel do frame 1 dentro da imagem de 200 x 225 (inclui margens).
 BOSS_CENTRO_X equ 116
 BOSS_CENTRO_Y equ 74
+
+; Ajustes do combate em quadros (cada quadro tem SDL_Delay de 16 ms + desenho).
+BOSS_PERSEGUIR equ 0
+BOSS_CARREGAR equ 1
+BOSS_DASH equ 2
+BOSS_VULNERAVEL equ 3
+BOSS_MORTO equ 4
+BOSS_FRAME_ANDANDO equ 0
+BOSS_FRAME_CARGA equ 1
+BOSS_CARGA_FRAMES equ 6
+BOSS_FRAME_DASH equ 7
+BOSS_FRAME_VULNERAVEL equ 9
+BOSS_FRAME_MORTE equ 10
+BOSS_TOTAL_FRAMES equ 11
+BOSS_PE_Y equ 100               ; linha dos pes nas sprites de movimento/ataque
+BOSS_ESPERA_QUADROS equ 225       ; cerca de 4 s perseguindo entre ataques
+BOSS_CARGA_POR_FRAME equ 5       ; ataque1 a ataque6: cerca de 0,96 s no total
+BOSS_DASH_QUADROS equ 15          ; cerca de 0,32 s, dash1 e dash2
+BOSS_DASH_DISTANCIA equ 200       ; pixels, igual em qualquer direcao
+BOSS_VULNERAVEL_QUADROS equ 47    ; cerca de 0,75 s com a sprite vulneravel
+BOSS_HITBOX_X equ 105
+BOSS_HITBOX_Y equ 50
 
 WALL1_X equ 0       ; obstaculo teste
 WALL1_Y equ 0
@@ -78,7 +100,24 @@ section .data
     rei_bmp db "Rei.bmp", 0
     reiC1_bmp db "Rei C1.bmp", 0
     reiC2_bmp db "Rei C2.bmp", 0
-    boss_bmp db "assets/sprites/boss1/Frame1boss.bmp", 0
+    boss_bmp db "assets/sprites/boss1/boss1andando.bmp", 0
+    boss_ataque1_bmp db "assets/sprites/boss1/boss1ataque1.bmp", 0
+    boss_ataque2_bmp db "assets/sprites/boss1/boss1ataque2.bmp", 0
+    boss_ataque3_bmp db "assets/sprites/boss1/boss1ataque3.bmp", 0
+    boss_ataque4_bmp db "assets/sprites/boss1/boss1ataque4.bmp", 0
+    boss_ataque5_bmp db "assets/sprites/boss1/boss1ataque5.bmp", 0
+    boss_ataque6_bmp db "assets/sprites/boss1/boss1ataque6.bmp", 0
+    boss_dash1_bmp db "assets/sprites/boss1/boss1dash1.bmp", 0
+    boss_dash2_bmp db "assets/sprites/boss1/boss1dash2.bmp", 0
+    ; Nome original com acento em UTF-8, como esperado pelo SDL no Linux.
+    boss_vulneravel_bmp db "assets/sprites/boss1/boss1Vulner", 0xC3, 0xA1, "vel.bmp", 0
+    boss_morte_bmp db "assets/sprites/boss1/boss1morte.bmp", 0
+    boss_arquivos dq boss_bmp, boss_ataque1_bmp, boss_ataque2_bmp, boss_ataque3_bmp
+                  dq boss_ataque4_bmp, boss_ataque5_bmp, boss_ataque6_bmp
+                  dq boss_dash1_bmp, boss_dash2_bmp, boss_vulneravel_bmp, boss_morte_bmp
+    ; Recortes em pixels dos desenhos novos, sem alterar os arquivos originais.
+    boss_vulneravel_src dd 38, 50, 46, 54
+    boss_morte_src dd 34, 343, 28, 33
     ; Posicao da imagem completa; o corpo comeca 88 px a direita e 41 px abaixo.
     boss_rect dd 284, 60, 0, 0    ; x, y, largura, altura (tamanho original)
     modo_leitura db "rb", 0
@@ -91,7 +130,15 @@ section .bss
     tex_w         resd 1   ; largura da imagem (preenchido por SDL_QueryTexture)
     tex_h         resd 1   ; altura da imagem
     king_idle     resq 1   ; textura do Rei.bmp (sprite parado)
-    boss_idle     resq 1   ; textura do primeiro frame do boss
+    boss_texturas resq BOSS_TOTAL_FRAMES
+    boss_frame    resd 1   ; indice na tabela boss_arquivos (BOSS_FRAME_*)
+    boss_desenho_rect resd 4 ; destino visual, independente da posicao/hitbox
+    boss_estado   resd 1   ; inicia em BOSS_PERSEGUIR
+    boss_contador resd 1   ; quadros no estado atual
+    boss_dash_x   resd 1   ; posicao fracionaria durante o dash (float)
+    boss_dash_y   resd 1
+    boss_dash_vx  resd 1   ; direcao/velocidade fixadas no inicio do dash
+    boss_dash_vy  resd 1
     boss_meio_passo resd 1 ; acumula a metade de pixel restante entre quadros
     king_walk     resq 2   ; [0] = Rei C.bmp, [1] = Rei C2.bmp
     frame_atual   resd 1   ; 0 ou 1 (qual das duas está ativa)
@@ -159,12 +206,19 @@ main:
     call CarregarTextura
     mov  [king_walk + 8], rax     ; +8: segundo ponteiro do array
 
-    ; Frame padrao do boss, usado parado e em movimento no tamanho original.
-    lea  rdi, [boss_bmp]
+    ; Carrega todos os frames antes de usar r13 para o teclado.
+    xor  r13d, r13d
+.carrega_boss:
+    lea  rax, [boss_arquivos]
+    mov  rdi, [rax + r13*8]
     call CarregarTextura
-    mov  [boss_idle], rax
+    lea  rcx, [boss_texturas]
+    mov  [rcx + r13*8], rax
+    inc  r13d
+    cmp  r13d, BOSS_TOTAL_FRAMES
+    jl   .carrega_boss
 
-    mov  rdi, rax
+    mov  rdi, [boss_texturas]
     xor  esi, esi
     xor  edx, edx
     lea  rcx, [boss_rect + 8]
@@ -283,17 +337,20 @@ main:
 .y_max_ok:
     mov  [rei_y], eax
 
+    cmp dword [boss_estado], BOSS_MORTO
+    je .colisoes_cenario
     mov edi, dword [boss_rect]       ; X do boss
-    add edi, 105                     ; ajuste x
+    add edi, BOSS_HITBOX_X           ; ajuste x
     mov esi, dword [boss_rect + 4]   ; Y do boss
-    add esi, 40                      ; ajuste y
+    add esi, BOSS_HITBOX_Y           ; ajuste y
     mov edx, BOSS_HITBOX_L
     mov ecx, BOSS_HITBOX_A
     call TestaColisao
     cmp rax, 1
     je .houve_colisao
 
-    mov edi, WALL1_X        
+.colisoes_cenario:
+    mov edi, WALL1_X
     mov esi, WALL1_Y
     mov edx, WALL1_L
     mov ecx, WALL1_A
@@ -367,7 +424,7 @@ main:
         mov  dword [movendo], 1
 
 .animacao:
-    call MovimentarBoss
+    call AtualizarBoss
 
     ; lógica de animação aqui
     ; por exemplo, alternar entre texturas diferentes
@@ -404,10 +461,11 @@ main:
     call SDL_RenderCopy
 
     ; Desenha o boss sobre o cenario, antes do personagem.
+    call PrepararDesenhoBoss     ; rdx = recorte/NULL, rcx = destino alinhado
     mov  rdi, r12
-    mov  rsi, [boss_idle]
-    xor  edx, edx
-    lea  rcx, [boss_rect]
+    mov  eax, [boss_frame]
+    lea  rsi, [boss_texturas]
+    mov  rsi, [rsi + rax*8]
     call SDL_RenderCopy
  
     mov eax, [rei_x]            ; hitbox largura
@@ -443,11 +501,13 @@ main:
     lea rsi, [rsp+64]            
     call SDL_RenderDrawRect
 
+    cmp dword [boss_estado], BOSS_MORTO
+    je .desenha_paredes
     mov eax, dword [boss_rect]
-    add eax, 105                 ; ajuste do X     
+    add eax, BOSS_HITBOX_X       ; ajuste do X
     mov dword [rsp+64], eax
     mov eax, dword [boss_rect + 4]
-    add eax, 40                  ; ajsute do y    
+    add eax, BOSS_HITBOX_Y       ; ajuste do Y
     mov dword [rsp+68], eax
 
     mov dword [rsp+72], BOSS_HITBOX_L 
@@ -457,6 +517,7 @@ main:
     lea rsi, [rsp+64]
     call SDL_RenderDrawRect
     
+.desenha_paredes:
     ; parede verde
     mov rdi, r12
     xor esi, esi            ; R = 0
@@ -545,8 +606,14 @@ main:
     jmp  .loop
 
 .fim:
-    mov  rdi, [boss_idle]
+    xor  r13d, r13d
+.libera_boss:
+    lea  rax, [boss_texturas]
+    mov  rdi, [rax + r13*8]
     call SDL_DestroyTexture
+    inc  r13d
+    cmp  r13d, BOSS_TOTAL_FRAMES
+    jl   .libera_boss
     mov  rdi, r15
     call SDL_DestroyTexture
     mov  rdi, [king_idle]
@@ -570,9 +637,187 @@ main:
     xor  eax, eax
     ret
 
+; Alinha as novas poses pelos pes, mantendo a escala original dos pixels.
+; Retorna os argumentos srcrect (rdx) e dstrect (rcx) de SDL_RenderCopy.
+PrepararDesenhoBoss:
+    lea  rcx, [boss_desenho_rect]
+    mov  eax, [boss_rect]
+    mov  [rcx], eax
+    mov  eax, [boss_rect + 4]
+    mov  [rcx + 4], eax
+    mov  eax, [boss_rect + 8]
+    mov  [rcx + 8], eax
+    mov  eax, [boss_rect + 12]
+    mov  [rcx + 12], eax
+    xor  edx, edx
+    cmp  dword [boss_frame], BOSS_FRAME_VULNERAVEL
+    je   .vulneravel
+    cmp  dword [boss_frame], BOSS_FRAME_MORTE
+    jne  .fim
+    lea  rdx, [boss_morte_src]
+    jmp  .alinhar
+.vulneravel:
+    lea  rdx, [boss_vulneravel_src]
+.alinhar:
+    mov  eax, [rdx + 8]
+    mov  [rcx + 8], eax
+    shr  eax, 1
+    neg  eax
+    add  eax, BOSS_CENTRO_X
+    add  [rcx], eax
+    mov  eax, [rdx + 12]
+    mov  [rcx + 12], eax
+    neg  eax
+    add  eax, BOSS_PE_Y
+    add  [rcx + 4], eax
+.fim:
+    ret
+
+; Apenas a perseguicao move normalmente. Carga e vulnerabilidade ficam paradas.
+AtualizarBoss:
+    sub  rsp, 8                 ; alinhamento System V antes das chamadas
+    cmp  dword [boss_estado], BOSS_MORTO
+    je   .morto
+    cmp  dword [boss_estado], BOSS_CARREGAR
+    je   .carga
+    cmp  dword [boss_estado], BOSS_DASH
+    je   .dash
+    cmp  dword [boss_estado], BOSS_VULNERAVEL
+    je   .vulneravel
+
+.perseguir:
+    cmp  dword [boss_contador], BOSS_ESPERA_QUADROS
+    jae  .inicia_carga
+    mov  dword [boss_frame], BOSS_FRAME_ANDANDO
+    inc  dword [boss_contador]
+    call MovimentarBoss
+    jmp  .fim
+
+.inicia_carga:
+    mov  dword [boss_estado], BOSS_CARREGAR
+    mov  dword [boss_contador], 0
+.carga:
+    mov  eax, [boss_contador]
+    cmp  eax, BOSS_CARGA_POR_FRAME * BOSS_CARGA_FRAMES
+    jae  .inicia_dash
+    xor  edx, edx
+    mov  ecx, BOSS_CARGA_POR_FRAME
+    div  ecx
+    add  eax, BOSS_FRAME_CARGA   ; ataque1 (aviso) seguido de ataque2 a ataque6
+    mov  [boss_frame], eax
+    inc  dword [boss_contador]
+    jmp  .fim
+
+.inicia_dash:
+    ; Mira no centro atual do jogador uma unica vez; nao o segue durante o dash.
+    mov  eax, [rei_x]
+    add  eax, BOXREI_L / 2 - BOSS_CENTRO_X
+    sub  eax, [boss_rect]
+    cvtsi2ss xmm0, eax
+    mov  eax, [rei_y]
+    add  eax, BOXREI_A / 2 - BOSS_CENTRO_Y
+    sub  eax, [boss_rect + 4]
+    cvtsi2ss xmm1, eax
+
+    ; Normaliza (dx, dy): o alcance nao aumenta nas diagonais.
+    movaps xmm2, xmm0
+    mulss xmm2, xmm0
+    movaps xmm3, xmm1
+    mulss xmm3, xmm1
+    addss xmm2, xmm3
+    xorps xmm3, xmm3
+    ucomiss xmm2, xmm3
+    je   .inicia_vulneravel      ; centros coincidentes: evita divisao por zero
+    sqrtss xmm2, xmm2
+    mov  eax, BOSS_DASH_DISTANCIA
+    cvtsi2ss xmm3, eax
+    mov  eax, BOSS_DASH_QUADROS
+    cvtsi2ss xmm4, eax
+    divss xmm3, xmm4
+    divss xmm3, xmm2
+    mulss xmm0, xmm3
+    mulss xmm1, xmm3
+    movss [boss_dash_vx], xmm0
+    movss [boss_dash_vy], xmm1
+    cvtsi2ss xmm0, dword [boss_rect]
+    cvtsi2ss xmm1, dword [boss_rect + 4]
+    movss [boss_dash_x], xmm0
+    movss [boss_dash_y], xmm1
+    mov  dword [boss_estado], BOSS_DASH
+    mov  dword [boss_contador], 0
+
+.dash:
+    cmp  dword [boss_contador], BOSS_DASH_QUADROS
+    jae  .inicia_vulneravel
+    mov  eax, BOSS_FRAME_DASH    ; primeira metade: dash1
+    cmp  dword [boss_contador], BOSS_DASH_QUADROS / 2
+    jb   .frame_dash
+    inc  eax                    ; segunda metade: dash2
+.frame_dash:
+    mov  [boss_frame], eax
+    inc  dword [boss_contador]
+    mov  r8d, [boss_rect]
+    mov  r9d, [boss_rect + 4]
+    movss xmm0, [boss_dash_x]
+    addss xmm0, [boss_dash_vx]
+    movss [boss_dash_x], xmm0
+    cvtss2si eax, xmm0
+    mov  [boss_rect], eax
+    movss xmm1, [boss_dash_y]
+    addss xmm1, [boss_dash_vy]
+    movss [boss_dash_y], xmm1
+    cvtss2si eax, xmm1
+    mov  [boss_rect + 4], eax
+
+    ; O corpo do boss nao deve sair da arena durante o dash.
+    cmp  dword [boss_rect], WALL1_L - BOSS_HITBOX_X
+    jl   .interrompe_dash
+    cmp  dword [boss_rect], WALL4_X - BOSS_HITBOX_X - BOSS_HITBOX_L
+    jg   .interrompe_dash
+    cmp  dword [boss_rect + 4], WALL2_A - BOSS_HITBOX_Y
+    jl   .interrompe_dash
+    cmp  dword [boss_rect + 4], WALL3_Y - BOSS_HITBOX_Y - BOSS_HITBOX_A
+    jg   .interrompe_dash
+
+    ; Preserva a colisao existente com o jogador. Dano sera integrado depois.
+    mov  edi, [boss_rect]
+    add  edi, BOSS_HITBOX_X
+    mov  esi, [boss_rect + 4]
+    add  esi, BOSS_HITBOX_Y
+    mov  edx, BOSS_HITBOX_L
+    mov  ecx, BOSS_HITBOX_A
+    call TestaColisao
+    test eax, eax
+    jz   .fim
+.interrompe_dash:
+    mov  [boss_rect], r8d
+    mov  [boss_rect + 4], r9d
+
+.inicia_vulneravel:
+    mov  dword [boss_estado], BOSS_VULNERAVEL
+    mov  dword [boss_contador], 0
+.vulneravel:
+    cmp  dword [boss_contador], BOSS_VULNERAVEL_QUADROS
+    jae  .volta_perseguir
+    mov  dword [boss_frame], BOSS_FRAME_VULNERAVEL
+    inc  dword [boss_contador]
+    jmp  .fim
+.volta_perseguir:
+    mov  dword [boss_estado], BOSS_PERSEGUIR
+    mov  dword [boss_contador], 0
+    mov  dword [boss_meio_passo], 0
+    jmp  .perseguir
+.morto:
+    ; O sistema de dano devera definir boss_estado = BOSS_MORTO ao derrotar o boss.
+    mov  dword [boss_frame], BOSS_FRAME_MORTE
+.fim:
+    add  rsp, 8
+    ret
+
 ; Persegue o centro do jogador, com metade de VEL em cada eixo.
 ; Usa apenas registradores temporarios e mantem o primeiro sprite.
 MovimentarBoss:
+    sub  rsp, 8                 ; alinhamento antes de TestaColisao
     mov r8d, dword [boss_rect]          ; posição anterior 
     mov r9d, dword [boss_rect + 4]
 
@@ -605,9 +850,9 @@ MovimentarBoss:
     add  [boss_rect + 4], eax
 
     mov edi, dword [boss_rect]
-    add edi, 105
+    add edi, BOSS_HITBOX_X
     mov esi, dword [boss_rect + 4]
-    add esi, 40
+    add esi, BOSS_HITBOX_Y
     mov edx, BOSS_HITBOX_L
     mov ecx, BOSS_HITBOX_A
     call TestaColisao
@@ -619,6 +864,7 @@ MovimentarBoss:
     mov dword [boss_rect + 4], r9d
 
     .passo_ok:
+        add rsp, 8
         ret
 
 TestaColisao:
