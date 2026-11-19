@@ -786,7 +786,7 @@ main:
 
 .sem_hitbox_ataque:
 
-    ; 1. Define a cor do "pincel" do SDL para Vermelho (R=255, G=0, B=0, Alpha=255)
+    ; Define a cor do "pincel" do SDL para azul (R=0, G=0, B=255, Alpha=255)
     mov rdi, r12
     xor esi, esi
     xor ecx, ecx
@@ -811,6 +811,14 @@ main:
     mov rdi, r12
     lea rsi, [rsp+64]            
     call SDL_RenderDrawRect
+
+    ; Define a cor do "pincel" do SDL para Vermelho (R=255, G=0, B=0, Alpha=255)
+    mov rdi, r12
+    mov esi, 255
+    xor edx, edx
+    xor ecx, ecx
+    mov r8d, 255
+    call SDL_SetRenderDrawColor
 
     mov eax, dword [boss_rect]
     add eax, 105                 ; ajuste do X     
