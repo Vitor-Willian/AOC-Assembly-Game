@@ -116,6 +116,8 @@ section .bss
 
     boss_idle     resq 1   ; textura do primeiro frame do boss
     boss_meio_passo resd 1 ; acumula a metade de pixel restante entre quadros
+    percival_vivo resd 1   ; 0 = morto, 1 = vivo
+    percival_hitbox resd 4   ; hitbox do boss (x, y, w, h)
 
     frame_atual   resd 1   ; 0 ou 1 (qual das duas está ativa)
     cont_anim     resd 1   ; quadros passados desde a última troca
@@ -196,15 +198,27 @@ main:
     mov  [king_walk + 8], rax     ; +8: segundo ponteiro do array
 
     ; Frame padrao do boss, usado parado e em movimento no tamanho original.
-    lea  rdi, [boss_bmp]
+    lea rdi, [boss_bmp]
     call CarregarTextura
-    mov  [boss_idle], rax
+    mov [boss_idle], rax
 
-    mov  rdi, rax
-    xor  esi, esi
-    xor  edx, edx
-    lea  rcx, [boss_rect + 8]
-    lea  r8, [boss_rect + 12]
+    mov eax, [boss_rect]
+    add eax, 105
+    mov [percival_hitbox], eax
+
+    mov eax, [boss_rect + 4]
+    add eax, 40
+    mov [percival_hitbox + 4], eax
+
+    mov dword [percival_hitbox + 8], BOSS_HITBOX_L
+    mov dword [percival_hitbox + 12], BOSS_HITBOX_A
+    mov dword [percival_vivo], 1
+
+    mov rdi, [boss_idle]
+    xor esi, esi
+    xor edx, edx
+    lea rcx, [boss_rect + 8]
+    lea r8, [boss_rect + 12]
     call SDL_QueryTexture
 
     ; ataque
@@ -501,11 +515,11 @@ main:
 
     jmp .sem_colisao
 
-    .houve_colisao:         ; volta pra onde estava
-        mov [rei_x], r8d
-        mov [rei_y], r9d
+.houve_colisao:         ; volta pra onde estava
+    mov [rei_x], r8d
+    mov [rei_y], r9d
     
-    .sem_colisao:
+.sem_colisao:
     mov  dword [movendo], 0
         mov  eax, [rei_x]          
         cmp  eax, r8d
@@ -513,8 +527,8 @@ main:
         mov  eax, [rei_y]
         cmp  eax, r9d
         je   .animacao
-    .mexeu:
-        mov  dword [movendo], 1
+.mexeu:
+    mov  dword [movendo], 1
 
 .animacao:
     call MovimentarBoss
@@ -599,12 +613,15 @@ main:
     call SDL_RenderCopy
 
     ; Desenha o boss sobre o cenario, antes do personagem.
-    mov  rdi, r12
-    mov  rsi, [boss_idle]
-    xor  edx, edx
-    lea  rcx, [boss_rect]
+    cmp dword [percival_vivo], 1
+    jne .sem_boss
+    mov rdi, r12
+    mov rsi, [boss_idle]
+    xor edx, edx
+    lea rcx, [boss_rect]
     call SDL_RenderCopy
- 
+    .sem_boss:
+    
     ; x = posição do rei + metade da diferença de largura
     mov eax, [rei_x]
     mov ecx, [idle_w]
@@ -760,6 +777,15 @@ main:
     lea rcx, [rsp+64]
     call SDL_RenderCopy
 
+    ; Verifica se Percival está vivo
+    cmp dword[percival_vivo], 1
+    jne .sem_swipe
+
+    call BossAttacked
+    cmp eax, 1
+    jne .sem_swipe
+    call BossDied
+
 .sem_swipe:
     cmp qword [swipe_atual], 0
     je .sem_hitbox_ataque
@@ -813,6 +839,9 @@ main:
     call SDL_RenderDrawRect
 
     ; Define a cor do "pincel" do SDL para Vermelho (R=255, G=0, B=0, Alpha=255)
+    cmp dword [percival_vivo], 1
+    jne .sem_hitbox_boss
+
     mov rdi, r12
     mov esi, 255
     xor edx, edx
@@ -820,19 +849,23 @@ main:
     mov r8d, 255
     call SDL_SetRenderDrawColor
 
-    mov eax, dword [boss_rect]
-    add eax, 105                 ; ajuste do X     
-    mov dword [rsp+64], eax
-    mov eax, dword [boss_rect + 4]
-    add eax, 40                  ; ajsute do y    
-    mov dword [rsp+68], eax
+    mov eax, [percival_hitbox]
+    mov [rsp+64], eax
 
-    mov dword [rsp+72], BOSS_HITBOX_L 
-    mov dword [rsp+76], BOSS_HITBOX_A
+    mov eax, [percival_hitbox + 4]
+    mov [rsp+68], eax
+
+    mov eax, [percival_hitbox + 8]
+    mov [rsp+72], eax
+
+    mov eax, [percival_hitbox + 12]
+    mov [rsp+76], eax
 
     mov rdi, r12
     lea rsi, [rsp+64]
     call SDL_RenderDrawRect
+
+.sem_hitbox_boss:
     
     ; parede verde
     mov rdi, r12
@@ -922,8 +955,13 @@ main:
     jmp  .loop
 
 .fim:
-    mov  rdi, [boss_idle]
+    cmp qword [boss_idle], 0
+    je .boss_ja_removido
+    mov rdi, [boss_idle]
     call SDL_DestroyTexture
+    mov qword [boss_idle], 0
+
+.boss_ja_removido:
     mov  rdi, r15
     call SDL_DestroyTexture
     mov  rdi, [king_idle]
@@ -950,6 +988,9 @@ main:
 ; Persegue o centro do jogador, com metade de VEL em cada eixo.
 ; Usa apenas registradores temporarios e mantem o primeiro sprite.
 MovimentarBoss:
+    cmp dword [percival_vivo], 1
+    jne .boss_removido
+
     mov r8d, dword [boss_rect]          ; posição anterior 
     mov r9d, dword [boss_rect + 4]
 
@@ -995,8 +1036,24 @@ MovimentarBoss:
     mov dword [boss_rect], r8d          ;volta pra posição anterior
     mov dword [boss_rect + 4], r9d
 
-    .passo_ok:
-        ret
+.passo_ok:
+    call AtualizarPercivalHitbox
+    ret
+.boss_removido:
+    ret
+
+AtualizarPercivalHitbox:
+    mov eax, [boss_rect]
+    add eax, 105
+    mov [percival_hitbox], eax
+
+    mov eax, [boss_rect + 4]
+    add eax, 40
+    mov [percival_hitbox + 4], eax
+
+    mov dword [percival_hitbox + 8], BOSS_HITBOX_L
+    mov dword [percival_hitbox + 12], BOSS_HITBOX_A
+    ret
 
 TestaColisao:
     mov eax, [rei_x]            ; pega x do rei
@@ -1025,6 +1082,49 @@ TestaColisao:
 
 .livre:
     mov rax, 0                  ; Retorna 0 (Sem colisão)
+    ret
+
+BossAttacked:
+    mov r8d, [percival_hitbox]
+    mov r9d, [percival_hitbox + 4]
+
+    mov r10d, r8d
+    add r10d, [percival_hitbox + 8]
+
+    mov r11d, r9d
+    add r11d, [percival_hitbox + 12]
+
+    mov edx, [atk_hitbox]
+    mov ecx, [atk_hitbox + 4]
+
+    mov rdi, rdx
+    add edi, [atk_hitbox + 8]
+
+    mov rsi, rcx
+    add esi, [atk_hitbox + 12]
+
+    cmp r10d, edx
+    jl .boss_fora
+    cmp r8d, edi
+    jg .boss_fora
+    cmp r11d, ecx
+    jl .boss_fora
+    cmp r9d, esi
+    jg .boss_fora
+
+    mov eax, 1
+    ret
+
+.boss_fora:
+    mov eax, 0
+    ret
+
+BossDied:
+    mov dword [percival_vivo], 0
+    mov dword [percival_hitbox], 0
+    mov dword [percival_hitbox + 4], 0
+    mov dword [percival_hitbox + 8], 0
+    mov dword [percival_hitbox + 12], 0
     ret
 
 CarregarTextura:
