@@ -447,15 +447,19 @@ main:
 .y_max_ok:
     mov  [rei_y], eax
 
-    mov edi, dword [boss_rect]       ; X do boss
-    add edi, 105                     ; ajuste x
-    mov esi, dword [boss_rect + 4]   ; Y do boss
-    add esi, 40                      ; ajuste y
-    mov edx, BOSS_HITBOX_L
-    mov ecx, BOSS_HITBOX_A
+    cmp dword [percival_vivo], 1
+    jne .sem_colisao_boss
+
+    mov edi, [percival_hitbox]
+    mov esi, [percival_hitbox + 4]
+    mov edx, [percival_hitbox + 8]
+    mov ecx, [percival_hitbox + 12]
     call TestaColisao
+
     cmp rax, 1
     je .houve_colisao
+
+.sem_colisao_boss:
 
     mov edi, WALL1_X        
     mov esi, WALL1_Y
