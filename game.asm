@@ -61,7 +61,7 @@ BOSS_CARGA_POR_FRAME equ 5       ; ataque1 a ataque6: cerca de 0,96 s no total
 BOSS_DASH_QUADROS equ 15          ; cerca de 0,32 s, dash1 e dash2
 BOSS_DASH_DISTANCIA equ 200       ; pixels, igual em qualquer direcao
 BOSS_VULNERAVEL_QUADROS equ 47    ; cerca de 0,75 s com a sprite vulneravel
-BOSS_HITBOX_X equ 105
+BOSS_HITBOX_X equ 100
 BOSS_HITBOX_Y equ 50
 
 WALL1_X equ 0       ; obstaculo teste
@@ -256,16 +256,7 @@ main:
     cmp  r13d, BOSS_TOTAL_FRAMES
     jl   .carrega_boss
 
-    mov eax, [boss_rect]
-    add eax, 105
-    mov [percival_hitbox], eax
-
-    mov eax, [boss_rect + 4]
-    add eax, 40
-    mov [percival_hitbox + 4], eax
-
-    mov dword [percival_hitbox + 8], BOSS_HITBOX_L
-    mov dword [percival_hitbox + 12], BOSS_HITBOX_A
+    call AtualizarPercivalHitbox    
     mov dword [percival_vivo], 1
 
     mov rdi, [boss_texturas]
@@ -1016,7 +1007,7 @@ main:
     jmp  .loop
 
 .fim:
-    cmp qword [boss_idle], 0
+    cmp qword [boss_texturas], 0
     je .boss_ja_removido
     xor  r13d, r13d
 .libera_boss:
@@ -1210,6 +1201,7 @@ AtualizarBoss:
 .inicia_vulneravel:
     mov  dword [boss_estado], BOSS_VULNERAVEL
     mov  dword [boss_contador], 0
+    call AtualizarPercivalHitbox
 .vulneravel:
     cmp  dword [boss_contador], BOSS_VULNERAVEL_QUADROS
     jae  .volta_perseguir
@@ -1287,11 +1279,11 @@ MovimentarBoss:
 
 AtualizarPercivalHitbox:
     mov eax, [boss_rect]
-    add eax, 105
+    add eax, BOSS_HITBOX_X
     mov [percival_hitbox], eax
 
     mov eax, [boss_rect + 4]
-    add eax, 40
+    add eax, BOSS_HITBOX_Y
     mov [percival_hitbox + 4], eax
 
     mov dword [percival_hitbox + 8], BOSS_HITBOX_L
