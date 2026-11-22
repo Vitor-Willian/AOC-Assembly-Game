@@ -27,6 +27,10 @@ SC_W   equ 26       ; scancodes (posição física da tecla)
 SC_A   equ 4
 SC_S   equ 22
 SC_D   equ 7
+SC_LEFT  equ 80
+SC_RIGHT equ 79
+SC_UP    equ 82
+SC_DOWN  equ 81
 
 BOXREI_A equ 30     ; altura da hitbox do rei 
 BOXREI_L equ 20     ; largura da hitbox
@@ -57,7 +61,7 @@ BOSS_CARGA_POR_FRAME equ 5       ; ataque1 a ataque6: cerca de 0,96 s no total
 BOSS_DASH_QUADROS equ 15          ; cerca de 0,32 s, dash1 e dash2
 BOSS_DASH_DISTANCIA equ 200       ; pixels, igual em qualquer direcao
 BOSS_VULNERAVEL_QUADROS equ 47    ; cerca de 0,75 s com a sprite vulneravel
-BOSS_HITBOX_X equ 105
+BOSS_HITBOX_X equ 100
 BOSS_HITBOX_Y equ 50
 
 WALL1_X equ 0       ; obstaculo teste
@@ -95,11 +99,21 @@ CAMP_Y  equ 245
 CAMP_A  equ 15
 CAMP_L  equ 25
 
+SWIPE_DIST equ 2
+
 section .data
-    titulo      db "Sprite", 0
-    rei_bmp db "Rei.bmp", 0
-    reiC1_bmp db "Rei C1.bmp", 0
-    reiC2_bmp db "Rei C2.bmp", 0
+    titulo      db "O Retorno do Rei", 0
+    rei_bmp db "assets/sprites/Rei.bmp", 0
+    reiC1_bmp db "assets/sprites/Rei C1.bmp", 0
+    reiC2_bmp db "assets/sprites/Rei C2.bmp", 0
+    reiAUp_bmp db "assets/sprites/Rei Atk Up.bmp", 0
+    reiADwn_bmp db "assets/sprites/Rei Atk Dwn.bmp", 0
+    reiAEsq_bmp db "assets/sprites/Rei Atk Esq.bmp", 0
+    reiADir_bmp db "assets/sprites/Rei Atk Dir.bmp", 0
+    atk_swipeUp db "assets/effects/Atk Swipe Up.bmp", 0
+    atk_swipeDwn db "assets/effects/Atk Swipe Dwn.bmp", 0
+    atk_swipeEsq db "assets/effects/Atk Swipe Esq.bmp", 0
+    atk_swipeDir db "assets/effects/Atk Swipe Dir.bmp", 0
     boss_bmp db "assets/sprites/boss1/boss1andando.bmp", 0
     boss_ataque1_bmp db "assets/sprites/boss1/boss1ataque1.bmp", 0
     boss_ataque2_bmp db "assets/sprites/boss1/boss1ataque2.bmp", 0
@@ -122,14 +136,23 @@ section .data
     boss_rect dd 284, 60, 0, 0    ; x, y, largura, altura (tamanho original)
     modo_leitura db "rb", 0
     img_mode db "rb", 0
-    img_file db "chao.bmp", 0 
-    img_file2 db "chao960.bmp", 0       ; novo mapa
+    img_file db "assets/background/chao.bmp", 0 
+    img_file2 db "assets/background/chao960.bmp", 0       ; novo mapa
     cena_atual db 0
 
 section .bss
     tex_w         resd 1   ; largura da imagem (preenchido por SDL_QueryTexture)
     tex_h         resd 1   ; altura da imagem
+    idle_w        resd 1   ; largura do sprite parado
+    idle_h        resd 1   ; altura do sprite parado
+
     king_idle     resq 1   ; textura do Rei.bmp (sprite parado)
+    king_atk_u    resq 1   ; textura do Rei Atk Up.bmp (ataque para cima)
+    king_atk_d    resq 1   ; textura do Rei Atk Dwn.bmp (ataque para baixo)
+    king_atk_l    resq 1   ; textura do Rei Atk Esq.bmp (ataque para esquerda)
+    king_atk_r    resq 1  ; textura do Rei Atk Dir.bmp (ataque para direita)
+    king_walk     resq 2   ; [0] = Rei C.bmp, [1] = Rei C2.bmp
+
     boss_texturas resq BOSS_TOTAL_FRAMES
     boss_frame    resd 1   ; indice na tabela boss_arquivos (BOSS_FRAME_*)
     boss_desenho_rect resd 4 ; destino visual, independente da posicao/hitbox
@@ -140,13 +163,28 @@ section .bss
     boss_dash_vx  resd 1   ; direcao/velocidade fixadas no inicio do dash
     boss_dash_vy  resd 1
     boss_meio_passo resd 1 ; acumula a metade de pixel restante entre quadros
-    king_walk     resq 2   ; [0] = Rei C.bmp, [1] = Rei C2.bmp
+    percival_vivo resd 1   ; 0 = morto, 1 = vivo
+    percival_hitbox resd 4   ; hitbox do boss (x, y, w, h)
+
     frame_atual   resd 1   ; 0 ou 1 (qual das duas está ativa)
     cont_anim     resd 1   ; quadros passados desde a última troca
     movendo       resd 1   ; 0 = parado, 1 = se moveu neste quadro
     walk_delay    equ 8    ; trocar de frame a cada X quadros
+
     rei_x         resd 1   ; posisão x hitbox
     rei_y         resd 1   ; posisão y hitbox
+
+    atk_dir       resd 1   ; direção do ataque (0= não, 1=esquerda, 2=direita, 3=cima, 4=baixo)
+    atacou        resd 1   ; 0 = não atacou, 1 = atacou
+    atk_fr        equ 12   ; frames que o ataque dura (1/60s cada)
+    ataque_timer  resd 1    ; conta quantos frames faltam para terminar o ataque
+
+    atk_swipe_u    resq 1   ; textura do efeito de ataque para cima
+    atk_swipe_d    resq 1   ; textura do efeito de ataque para baixo
+    atk_swipe_l    resq 1   ; textura do efeito de ataque para esquerda
+    atk_swipe_r    resq 1   ; textura do efeito de ataque para direita
+    swipe_atual    resq 1   ; textura do efeito de ataque atual (usada no desenho)
+    atk_hitbox     resd 4   ; hitbox do ataque (x, y, w, h)
 
 section .text
 ; Pilha em main:
@@ -218,12 +256,48 @@ main:
     cmp  r13d, BOSS_TOTAL_FRAMES
     jl   .carrega_boss
 
-    mov  rdi, [boss_texturas]
-    xor  esi, esi
-    xor  edx, edx
-    lea  rcx, [boss_rect + 8]
-    lea  r8, [boss_rect + 12]
+    call AtualizarPercivalHitbox    
+    mov dword [percival_vivo], 1
+
+    mov rdi, [boss_texturas]
+    xor esi, esi
+    xor edx, edx
+    lea rcx, [boss_rect + 8]
+    lea r8, [boss_rect + 12]
     call SDL_QueryTexture
+
+    ; ataque
+    lea rdi, [reiAUp_bmp]
+    call CarregarTextura
+    mov [king_atk_u], rax
+
+    lea rdi, [reiADwn_bmp]
+    call CarregarTextura
+    mov [king_atk_d], rax
+
+    lea rdi, [reiAEsq_bmp]
+    call CarregarTextura
+    mov [king_atk_l], rax
+
+    lea rdi, [reiADir_bmp]
+    call CarregarTextura
+    mov [king_atk_r], rax
+
+    lea  rdi, [atk_swipeUp]
+    call CarregarTextura
+    mov  [atk_swipe_u], rax
+
+    lea rdi, [atk_swipeDwn]
+    call CarregarTextura
+    mov  [atk_swipe_d], rax
+
+    lea rdi, [atk_swipeEsq]
+    call CarregarTextura
+    mov  [atk_swipe_l], rax
+
+    lea rdi, [atk_swipeDir]
+    call CarregarTextura
+    mov  [atk_swipe_r], rax
 
     ; pega o tamanho real da imagem, para não distorcer o sprite
     mov  rdi, r14
@@ -234,6 +308,12 @@ main:
     call SDL_QueryTexture
 
     ; monta o retângulo de destino: centralizado, com o tamanho da imagem
+    mov eax, [tex_w]
+    mov [idle_w], eax            ; guarda largura do sprite parado
+
+    mov eax, [tex_h]
+    mov [idle_h], eax            ; guarda altura do sprite parado
+
     mov  eax, [tex_w]
     mov  r9d, W
     sub  r9d, eax
@@ -272,6 +352,8 @@ main:
 .teclado:
     mov  r8d, [rei_x]              ; x antigo (antes era rsp+64) 
     mov  r9d, [rei_y]              ; y antigo (rsp+68)
+    mov  r10d, [atk_dir]           ; direção do ataque
+
     ; ---- lê as teclas e altera x, y ----
     cmp  byte [r13 + SC_W], 0
     je   .sem_w
@@ -289,6 +371,79 @@ main:
     je   .sem_d
     add  dword [rei_x], VEL        ; D: direita (x aumenta)
 .sem_d:
+
+    ; ---- atualiza a direção do ataque ----
+
+; Verifica se alguma seta está pressionada
+    mov eax, 0
+    cmp byte [r13 + SC_LEFT], 0
+    jne .tem_seta
+    cmp byte [r13 + SC_RIGHT], 0
+    jne .tem_seta
+    cmp byte [r13 + SC_UP], 0
+    jne .tem_seta
+    cmp byte [r13 + SC_DOWN], 0
+    jne .tem_seta
+
+    ; Nenhuma seta pressionada:
+    ; permite um novo ataque
+    mov dword [atk_dir], 0
+    mov dword [atacou], 0
+    mov dword [ataque_timer], 0
+    jmp .fim_ataque
+
+.tem_seta:
+    ; Se já atacou nesta pressionada, fica no idle
+    cmp dword [atacou], 1
+    je .ja_atacou
+
+    ; Escolhe a direção do ataque
+    cmp byte [r13 + SC_LEFT], 0
+    je .verifica_direita
+    mov dword [atk_dir], 1
+    jmp .marca_ataque
+
+.verifica_direita:
+    cmp byte [r13 + SC_RIGHT], 0
+    je .verifica_cima
+    mov dword [atk_dir], 2
+    jmp .marca_ataque
+
+.verifica_cima:
+    cmp byte [r13 + SC_UP], 0
+    je .verifica_baixo
+    mov dword [atk_dir], 3
+    jmp .marca_ataque
+
+.verifica_baixo:
+    mov dword [atk_dir], 4
+
+.marca_ataque:
+    mov dword [atacou], 1
+    mov dword [ataque_timer], atk_fr
+    jmp .fim_ataque
+
+.ja_atacou:
+    cmp dword [ataque_timer], 0
+    je  .termina_ataque
+
+    dec dword [ataque_timer]
+    ; Mantém atk_dir diferente de zero,
+    ; portanto continua mostrando o ataque
+    jmp .fim_ataque
+
+.termina_ataque:
+    mov dword [atk_dir], 0
+    mov qword [swipe_atual], 0
+    mov dword [atk_hitbox], 0
+    mov dword [atk_hitbox + 4], 0
+    mov dword [atk_hitbox + 8], 0
+    mov dword [atk_hitbox + 12], 0
+
+    mov dword [atk_dir], 0
+
+.fim_ataque:
+
 
     ; ---- limita x entre 0 e W - largura ----
     mov  eax, [rei_x]
@@ -337,17 +492,19 @@ main:
 .y_max_ok:
     mov  [rei_y], eax
 
-    cmp dword [boss_estado], BOSS_MORTO
-    je .colisoes_cenario
-    mov edi, dword [boss_rect]       ; X do boss
-    add edi, BOSS_HITBOX_X           ; ajuste x
-    mov esi, dword [boss_rect + 4]   ; Y do boss
-    add esi, BOSS_HITBOX_Y           ; ajuste y
-    mov edx, BOSS_HITBOX_L
-    mov ecx, BOSS_HITBOX_A
+    cmp dword [percival_vivo], 1
+    jne .sem_colisao_boss
+
+    mov edi, [percival_hitbox]
+    mov esi, [percival_hitbox + 4]
+    mov edx, [percival_hitbox + 8]
+    mov ecx, [percival_hitbox + 12]
     call TestaColisao
+
     cmp rax, 1
     je .houve_colisao
+
+.sem_colisao_boss:
 
 .colisoes_cenario:
     mov edi, WALL1_X
@@ -408,11 +565,11 @@ main:
 
     jmp .sem_colisao
 
-    .houve_colisao:         ; volta pra onde estava
-        mov [rei_x], r8d
-        mov [rei_y], r9d
+.houve_colisao:         ; volta pra onde estava
+    mov [rei_x], r8d
+    mov [rei_y], r9d
     
-    .sem_colisao:
+.sem_colisao:
     mov  dword [movendo], 0
         mov  eax, [rei_x]          
         cmp  eax, r8d
@@ -420,15 +577,52 @@ main:
         mov  eax, [rei_y]
         cmp  eax, r9d
         je   .animacao
-    .mexeu:
-        mov  dword [movendo], 1
+.mexeu:
+    mov  dword [movendo], 1
 
 .animacao:
     call AtualizarBoss
 
-    ; lógica de animação aqui
-    ; por exemplo, alternar entre texturas diferentes
-    ; para simular movimento
+
+.verificar_ataque:
+    cmp  dword [atk_dir], 0
+    jne  .atacando
+    jmp  .verificar_movimento
+
+.atacando:
+    mov  eax, [atk_dir]
+    cmp  eax, 1
+    je   .atk_esq
+    cmp  eax, 2
+    je   .atk_dir
+    cmp  eax, 3
+    je   .atk_up
+    cmp  eax, 4
+    je   .atk_down
+
+.atk_esq:
+    mov  r14, [king_atk_l]
+    mov rax, [atk_swipe_l]
+    mov [swipe_atual], rax
+    jmp  .desenha
+.atk_dir:
+    mov  r14, [king_atk_r]
+    mov rax, [atk_swipe_r]
+    mov [swipe_atual], rax
+    jmp  .desenha
+.atk_up:
+    mov  r14, [king_atk_u]
+    mov rax, [atk_swipe_u]
+    mov [swipe_atual], rax
+    jmp  .desenha
+.atk_down:
+    mov  r14, [king_atk_d]
+    mov rax, [atk_swipe_d]
+    mov [swipe_atual], rax
+    jmp  .desenha
+
+.verificar_movimento:
+    mov qword [swipe_atual], 0
     cmp  dword [movendo], 0
     jne  .andando
 
@@ -451,6 +645,14 @@ main:
     mov  r14, [rcx + rax*8]         ; r14 = textura do frame atual
 
 .desenha:
+    ; Obtém o tamanho do sprite atual
+    mov  rdi, r14
+    xor  esi, esi
+    xor  edx, edx
+    lea  rcx, [tex_w]
+    lea  r8,  [tex_h]
+    call SDL_QueryTexture
+
     mov  rdi, r12 
     call SDL_RenderClear
 
@@ -461,19 +663,33 @@ main:
     call SDL_RenderCopy
 
     ; Desenha o boss sobre o cenario, antes do personagem.
+    cmp dword [percival_vivo], 1
+    jne .sem_boss
     call PrepararDesenhoBoss     ; rdx = recorte/NULL, rcx = destino alinhado
     mov  rdi, r12
     mov  eax, [boss_frame]
     lea  rsi, [boss_texturas]
     mov  rsi, [rsi + rax*8]
     call SDL_RenderCopy
- 
-    mov eax, [rei_x]            ; hitbox largura
+    .sem_boss:
+    
+    ; x = posição do rei + metade da diferença de largura
+    mov eax, [rei_x]
+    mov ecx, [idle_w]
+    sub ecx, [tex_w]
+    sar ecx, 1
+    add eax, ecx
     mov [rsp+64], eax
 
-    mov eax, [rei_y]            ; hitbox altura
+    ; y = posição do rei + metade da diferença de altura
+    mov eax, [rei_y]
+    mov ecx, [idle_h]
+    sub ecx, [tex_h]
+    sar ecx, 1
+    add eax, ecx
     mov [rsp+68], eax
 
+    ; desenha usando o tamanho real do sprite atual
     mov eax, [tex_w]
     mov [rsp+72], eax
 
@@ -486,7 +702,197 @@ main:
     lea  rcx, [rsp+64]            ; dstrect
     call SDL_RenderCopy
 
-    ; 1. Define a cor do "pincel" do SDL para Vermelho (R=255, G=0, B=0, Alpha=255)
+    ; Se houver swipe, desenha o efeito de ataque
+    cmp qword [swipe_atual], 0
+    je .sem_swipe
+
+    mov r14, [swipe_atual]
+
+    mov rdi, r14
+    xor esi, esi
+    xor edx, edx
+    lea rcx, [tex_w]
+    lea r8, [tex_h]
+    call SDL_QueryTexture
+
+; Define a posição do swipe conforme a direção
+    cmp dword [atk_dir], 1
+    je .pos_swipe_esq
+
+    cmp dword [atk_dir], 2
+    je .pos_swipe_dir
+
+    cmp dword [atk_dir], 3
+    je .pos_swipe_up
+
+    ; Caso restante: ataque para baixo
+    jmp .pos_swipe_down
+
+
+.pos_swipe_esq:
+    ; x = rei_x - largura_swipe - distância
+    mov eax, [rei_x]
+    sub eax, [tex_w]
+    sub eax, SWIPE_DIST
+    mov [rsp+64], eax
+
+    ; y centralizado
+    mov eax, [rei_y]
+
+    mov ecx, BOXREI_A
+    sub ecx, [tex_h]
+    sar ecx, 1
+
+    add eax, ecx
+    mov [rsp+68], eax
+    jmp .tamanho_swipe
+
+
+.pos_swipe_dir:
+    ; x = rei_x + largura_hitbox + distância
+    mov eax, [rei_x]
+    add eax, BOXREI_L
+    add eax, SWIPE_DIST
+    mov [rsp+64], eax
+
+    ; y centralizado
+    mov eax, [rei_y]
+
+    mov ecx, BOXREI_A
+    sub ecx, [tex_h]
+    sar ecx, 1
+
+    add eax, ecx
+    mov [rsp+68], eax
+    jmp .tamanho_swipe
+
+
+.pos_swipe_up:
+    ; x centralizado
+    mov eax, [rei_x]
+
+    mov ecx, BOXREI_L
+    sub ecx, [tex_w]
+    sar ecx, 1
+
+    add eax, ecx
+    mov [rsp+64], eax
+    mov [rsp+64], eax
+
+    ; y = rei_y - altura_swipe - distância
+    mov eax, [rei_y]
+    sub eax, [tex_h]
+    sub eax, SWIPE_DIST
+    mov [rsp+68], eax
+    jmp .tamanho_swipe
+
+
+.pos_swipe_down:
+    ; x centralizado
+    mov eax, [rei_x]
+
+    mov ecx, BOXREI_L
+    sub ecx, [tex_w]
+    sar ecx, 1
+
+    add eax, ecx
+    mov [rsp+64], eax
+
+    ; y = rei_y + altura_hitbox + distância
+    mov eax, [rei_y]
+    add eax, BOXREI_A
+    add eax, SWIPE_DIST
+    mov [rsp+68], eax
+
+
+.tamanho_swipe:
+    mov eax, [rsp+64]
+    mov [atk_hitbox], eax
+
+    mov eax, [rsp+68]
+    mov [atk_hitbox + 4], eax
+
+
+    mov eax, [tex_w]
+    mov [rsp+72], eax
+    mov [atk_hitbox + 8], eax          ; largura do swipe
+
+    mov eax, [tex_h]
+    mov [rsp+76], eax
+    mov [atk_hitbox + 12], eax      ; altura do swipe
+
+    ; Desenha o swipe
+    mov rdi, r12
+    mov rsi, r14
+    xor edx, edx
+    lea rcx, [rsp+64]
+    call SDL_RenderCopy
+
+    ; Verifica se Percival está vivo
+    cmp dword[percival_vivo], 1
+    jne .sem_swipe
+
+    call BossAttacked
+    cmp eax, 1
+    jne .sem_swipe
+    call BossDied
+
+.sem_swipe:
+    cmp qword [swipe_atual], 0
+    je .sem_hitbox_ataque
+
+    mov eax, [atk_hitbox]
+    mov [rsp+64], eax
+    mov eax, [atk_hitbox + 4]
+    mov [rsp+68], eax
+    mov eax, [atk_hitbox + 8]
+    mov [rsp+72], eax
+    mov eax, [atk_hitbox + 12]
+    mov [rsp+76], eax
+    ; Cor do contorno do hitbox do ataque: amarelo
+    mov rdi, r12
+    mov esi, 255
+    mov edx, 255
+    mov ecx, 0
+    mov r8d, 255
+    call SDL_SetRenderDrawColor
+
+    mov rdi, r12
+    lea rsi, [rsp+64]
+    call SDL_RenderDrawRect
+
+.sem_hitbox_ataque:
+
+    ; Define a cor do "pincel" do SDL para azul (R=0, G=0, B=255, Alpha=255)
+    mov rdi, r12
+    xor esi, esi
+    xor ecx, ecx
+    mov ecx, 255
+    mov r8d, 255
+    call SDL_SetRenderDrawColor
+
+    ; Hitbox deve usar rei_x/rei_y, não a posição ajustada do sprite
+    mov eax, [rei_x]
+    mov [rsp+64], eax
+
+    mov eax, [rei_y]
+    mov [rsp+68], eax
+
+    mov dword [rsp+72], BOXREI_L
+    mov dword [rsp+76], BOXREI_A
+
+    mov rdi, r12
+    lea rsi, [rsp+64]
+    call SDL_RenderDrawRect       
+
+    mov rdi, r12
+    lea rsi, [rsp+64]            
+    call SDL_RenderDrawRect
+
+    ; Define a cor do "pincel" do SDL para Vermelho (R=255, G=0, B=0, Alpha=255)
+    cmp dword [percival_vivo], 1
+    jne .sem_hitbox_boss
+
     mov rdi, r12
     mov esi, 255
     xor edx, edx
@@ -494,28 +900,23 @@ main:
     mov r8d, 255
     call SDL_SetRenderDrawColor
 
-    mov dword [rsp+72], BOXREI_L        
-    mov dword [rsp+76], BOXREI_A        
+    mov eax, [percival_hitbox]
+    mov [rsp+64], eax
 
-    mov rdi, r12
-    lea rsi, [rsp+64]            
-    call SDL_RenderDrawRect
+    mov eax, [percival_hitbox + 4]
+    mov [rsp+68], eax
 
-    cmp dword [boss_estado], BOSS_MORTO
-    je .desenha_paredes
-    mov eax, dword [boss_rect]
-    add eax, BOSS_HITBOX_X       ; ajuste do X
-    mov dword [rsp+64], eax
-    mov eax, dword [boss_rect + 4]
-    add eax, BOSS_HITBOX_Y       ; ajuste do Y
-    mov dword [rsp+68], eax
+    mov eax, [percival_hitbox + 8]
+    mov [rsp+72], eax
 
-    mov dword [rsp+72], BOSS_HITBOX_L 
-    mov dword [rsp+76], BOSS_HITBOX_A
+    mov eax, [percival_hitbox + 12]
+    mov [rsp+76], eax
 
     mov rdi, r12
     lea rsi, [rsp+64]
     call SDL_RenderDrawRect
+
+.sem_hitbox_boss:
     
 .desenha_paredes:
     ; parede verde
@@ -606,6 +1007,8 @@ main:
     jmp  .loop
 
 .fim:
+    cmp qword [boss_texturas], 0
+    je .boss_ja_removido
     xor  r13d, r13d
 .libera_boss:
     lea  rax, [boss_texturas]
@@ -614,6 +1017,8 @@ main:
     inc  r13d
     cmp  r13d, BOSS_TOTAL_FRAMES
     jl   .libera_boss
+
+.boss_ja_removido:
     mov  rdi, r15
     call SDL_DestroyTexture
     mov  rdi, [king_idle]
@@ -796,6 +1201,7 @@ AtualizarBoss:
 .inicia_vulneravel:
     mov  dword [boss_estado], BOSS_VULNERAVEL
     mov  dword [boss_contador], 0
+    call AtualizarPercivalHitbox
 .vulneravel:
     cmp  dword [boss_contador], BOSS_VULNERAVEL_QUADROS
     jae  .volta_perseguir
@@ -817,7 +1223,9 @@ AtualizarBoss:
 ; Persegue o centro do jogador, com metade de VEL em cada eixo.
 ; Usa apenas registradores temporarios e mantem o primeiro sprite.
 MovimentarBoss:
-    sub  rsp, 8                 ; alinhamento antes de TestaColisao
+    cmp dword [percival_vivo], 1
+    jne .boss_removido
+
     mov r8d, dword [boss_rect]          ; posição anterior 
     mov r9d, dword [boss_rect + 4]
 
@@ -863,9 +1271,24 @@ MovimentarBoss:
     mov dword [boss_rect], r8d          ;volta pra posição anterior
     mov dword [boss_rect + 4], r9d
 
-    .passo_ok:
-        add rsp, 8
-        ret
+.passo_ok:
+    call AtualizarPercivalHitbox
+    ret
+.boss_removido:
+    ret
+
+AtualizarPercivalHitbox:
+    mov eax, [boss_rect]
+    add eax, BOSS_HITBOX_X
+    mov [percival_hitbox], eax
+
+    mov eax, [boss_rect + 4]
+    add eax, BOSS_HITBOX_Y
+    mov [percival_hitbox + 4], eax
+
+    mov dword [percival_hitbox + 8], BOSS_HITBOX_L
+    mov dword [percival_hitbox + 12], BOSS_HITBOX_A
+    ret
 
 TestaColisao:
     mov eax, [rei_x]            ; pega x do rei
@@ -894,6 +1317,49 @@ TestaColisao:
 
 .livre:
     mov rax, 0                  ; Retorna 0 (Sem colisão)
+    ret
+
+BossAttacked:
+    mov r8d, [percival_hitbox]
+    mov r9d, [percival_hitbox + 4]
+
+    mov r10d, r8d
+    add r10d, [percival_hitbox + 8]
+
+    mov r11d, r9d
+    add r11d, [percival_hitbox + 12]
+
+    mov edx, [atk_hitbox]
+    mov ecx, [atk_hitbox + 4]
+
+    mov rdi, rdx
+    add edi, [atk_hitbox + 8]
+
+    mov rsi, rcx
+    add esi, [atk_hitbox + 12]
+
+    cmp r10d, edx
+    jl .boss_fora
+    cmp r8d, edi
+    jg .boss_fora
+    cmp r11d, ecx
+    jl .boss_fora
+    cmp r9d, esi
+    jg .boss_fora
+
+    mov eax, 1
+    ret
+
+.boss_fora:
+    mov eax, 0
+    ret
+
+BossDied:
+    mov dword [percival_vivo], 0
+    mov dword [percival_hitbox], 0
+    mov dword [percival_hitbox + 4], 0
+    mov dword [percival_hitbox + 8], 0
+    mov dword [percival_hitbox + 12], 0
     ret
 
 CarregarTextura:
