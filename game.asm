@@ -152,6 +152,8 @@ section .data
 
     snd_golpe_f   db "assets/sounds/sfx/swipe_fix.wav", 0
 
+     percival_theme_f      db "assets/sounds/music/Percival.ogg", 0   ; ajuste nome e pasta
+
     modo_leitura db "rb", 0
     img_mode db "rb", 0
 
@@ -200,6 +202,8 @@ section .bss
     atk_swipe_r    resq 1   ; textura do efeito de ataque para direita
     swipe_atual    resq 1   ; textura do efeito de ataque atual (usada no desenho)
     atk_hitbox     resd 4   ; hitbox do ataque (x, y, w, h)
+
+    percival_theme resq 1
 
     snd_golpe     resq 1
 
@@ -340,6 +344,21 @@ main:
         mov qword [snd_golpe], 0
 
 .audio_carregado:
+
+     ; Música de fundo
+    lea  rdi, [percival_theme_f]
+    call Mix_LoadMUS             ; já recebe o caminho direto, sem RWFromFile
+    mov  [percival_theme], rax
+    test rax, rax
+    jz   .sem_musica             ; arquivo não encontrado: segue sem música
+
+    mov  rdi, rax                ; Mix_Music*
+    mov  esi, -1                 ; -1 = loop infinito
+    call Mix_PlayMusic
+
+    mov  edi, 40                 ; volume da música (0 a 128)
+    call Mix_VolumeMusic
+.sem_musica:
 
     ; pega o tamanho real da imagem, para não distorcer o sprite
     mov  rdi, r14
@@ -1087,6 +1106,13 @@ main:
     call Mix_FreeChunk
 
 .sem_golpe:
+
+    mov  rdi, [percival_theme]
+    test rdi, rdi
+    jz   .sem_free_musica
+    call Mix_FreeMusic
+
+.sem_free_musica:
 
     call SDL_Quit
 
