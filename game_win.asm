@@ -1,18 +1,16 @@
 default rel
 
-; Converte a convenção System V (rdi,rsi,rdx,rcx,r8,r9) para Win64
 %macro chamar 1
-    sub  rsp, 48               ; 32 de shadow space + 16 para args 5 e 6
-    mov  [rsp+40], r9          ; 6º argumento
-    mov  [rsp+32], r8          ; 5º argumento
-    mov  r9, rcx               ; 4º
-    mov  r8, rdx               ; 3º
-    mov  rdx, rsi              ; 2º
-    mov  rcx, rdi              ; 1º
+    sub  rsp, 48
+    mov  [rsp+40], r9
+    mov  [rsp+32], r8
+    mov  r9, rcx
+    mov  r8, rdx
+    mov  rdx, rsi
+    mov  rcx, rdi
     call %1
     add  rsp, 48
 %endmacro
-
 extern SDL_RenderSetLogicalSize
 extern SDL_GetKeyboardState
 
@@ -231,9 +229,9 @@ main:
     push r13
     push r14
     push r15
-    push rdi                 ; novo
-    push rsi                 ; novo
-    sub  rsp, 80
+    push rdi
+    push rsi
+    sub  rsp, 80         ; <- era 80
 
     ; Inicializa o SDL com vídeo e áudio
     mov  edi, SDL_INIT_VIDEO | SDL_INIT_AUDIO
@@ -1133,8 +1131,8 @@ main:
     chamar SDL_Quit
 
     add  rsp, 80
-    pop  rsi                 ; adicionar
-    pop  rdi                 ; adicionar
+    pop  rsi
+    pop  rdi          ; <- era 80
     pop  r15
     pop  r14
     pop  r13
@@ -1318,7 +1316,6 @@ AtualizarBoss:
     ; O sistema de dano devera definir boss_estado = BOSS_MORTO ao derrotar o boss.
     mov  dword [boss_frame], BOSS_FRAME_MORTE
 .fim:
-    .fim:
     add  rsp, 8
     ret
 
@@ -1528,3 +1525,4 @@ CarregarSom:
 .fim:
     pop rbx
     ret
+
