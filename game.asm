@@ -2,6 +2,11 @@ default rel
 extern SDL_RenderSetLogicalSize
 extern SDL_GetKeyboardState
 
+extern Mix_OpenAudio, Mix_LoadWAV_RW, Mix_LoadMUS
+extern Mix_PlayChannelTimed, Mix_PlayMusic, Mix_VolumeMusic, Mix_PlayChannel
+extern Mix_FreeChunk, Mix_FreeMusic, Mix_CloseAudio
+extern Mix_AllocateChannels
+
 extern SDL_Init, SDL_CreateWindow, SDL_CreateRenderer
 extern SDL_PollEvent
 extern SDL_SetRenderDrawColor, SDL_RenderClear, SDL_RenderPresent, SDL_Delay
@@ -15,6 +20,9 @@ SDL_INIT_VIDEO     equ 0x20
 WINDOWPOS_CENTERED equ 0x2FFF0000
 SDL_WINDOW_SHOWN   equ 4
 SDL_QUIT           equ 0x100
+
+SDL_INIT_AUDIO equ 0x10
+MIX_DEFAULT_FORMAT equ 0x8010    ; AUDIO_S16LSB
 
 SDL_WINDOW_FULLSCREEN_DESKTOP equ 0x1001
 SDL_KEYDOWN                   equ 0x300
@@ -103,6 +111,7 @@ SWIPE_DIST equ 2
 
 section .data
     titulo      db "O Retorno do Rei", 0
+
     rei_bmp db "assets/sprites/Rei.bmp", 0
     reiC1_bmp db "assets/sprites/Rei C1.bmp", 0
     reiC2_bmp db "assets/sprites/Rei C2.bmp", 0
@@ -110,10 +119,12 @@ section .data
     reiADwn_bmp db "assets/sprites/Rei Atk Dwn.bmp", 0
     reiAEsq_bmp db "assets/sprites/Rei Atk Esq.bmp", 0
     reiADir_bmp db "assets/sprites/Rei Atk Dir.bmp", 0
+
     atk_swipeUp db "assets/effects/Atk Swipe Up.bmp", 0
     atk_swipeDwn db "assets/effects/Atk Swipe Dwn.bmp", 0
     atk_swipeEsq db "assets/effects/Atk Swipe Esq.bmp", 0
     atk_swipeDir db "assets/effects/Atk Swipe Dir.bmp", 0
+
     boss_bmp db "assets/sprites/boss1/boss1andando.bmp", 0
     boss_ataque1_bmp db "assets/sprites/boss1/boss1ataque1.bmp", 0
     boss_ataque2_bmp db "assets/sprites/boss1/boss1ataque2.bmp", 0
@@ -134,11 +145,15 @@ section .data
     boss_morte_src dd 34, 343, 28, 33
     ; Posicao da imagem completa; o corpo comeca 88 px a direita e 41 px abaixo.
     boss_rect dd 284, 60, 0, 0    ; x, y, largura, altura (tamanho original)
-    modo_leitura db "rb", 0
-    img_mode db "rb", 0
+    
     img_file db "assets/background/chao.bmp", 0 
     img_file2 db "assets/background/chao960.bmp", 0       ; novo mapa
     cena_atual db 0
+
+    snd_golpe_f   db "assets/sounds/sfx/swipe_fix.wav", 0
+
+    modo_leitura db "rb", 0
+    img_mode db "rb", 0
 
 section .bss
     tex_w         resd 1   ; largura da imagem (preenchido por SDL_QueryTexture)
@@ -186,6 +201,8 @@ section .bss
     swipe_atual    resq 1   ; textura do efeito de ataque atual (usada no desenho)
     atk_hitbox     resd 4   ; hitbox do ataque (x, y, w, h)
 
+    snd_golpe     resq 1
+
 section .text
 ; Pilha em main:
 ; [rsp+0  .. rsp+63] SDL_Event
@@ -196,10 +213,21 @@ main:
     push r13
     push r14
     push r15
-    sub  rsp, 80          ; <- era 80
+    sub  rsp, 80         ; <- era 80
 
-    mov  edi, SDL_INIT_VIDEO
+    ; Inicializa o SDL com vídeo e áudio
+    mov  edi, SDL_INIT_VIDEO | SDL_INIT_AUDIO
     call SDL_Init
+
+    ; Mix_OpenAudio(frequency, format, channels, chunksize)
+    mov  edi, 44100
+    mov  esi, MIX_DEFAULT_FORMAT
+    mov  edx, 2                   ; estéreo
+    mov  ecx, 512            ; buffer
+    call Mix_OpenAudio
+
+    mov  edi, 16
+    call Mix_AllocateChannels
 
     lea  rdi, [titulo]
     mov  esi, WINDOWPOS_CENTERED
@@ -298,6 +326,20 @@ main:
     lea rdi, [atk_swipeDir]
     call CarregarTextura
     mov  [atk_swipe_r], rax
+
+    ; Sons e Musica
+    lea rdi, [snd_golpe_f]
+    call CarregarSom
+    mov [snd_golpe], rax
+    test rax, rax
+    jz .audio_indisponivel
+
+    jmp .audio_carregado
+
+.audio_indisponivel:
+        mov qword [snd_golpe], 0
+
+.audio_carregado:
 
     ; pega o tamanho real da imagem, para não distorcer o sprite
     mov  rdi, r14
@@ -421,6 +463,12 @@ main:
 .marca_ataque:
     mov dword [atacou], 1
     mov dword [ataque_timer], atk_fr
+
+    cmp qword [snd_golpe], 0
+    je .fim_ataque
+
+    mov rdi, [snd_golpe]
+    call TocarSom
     jmp .fim_ataque
 
 .ja_atacou:
@@ -1031,6 +1079,15 @@ main:
     call SDL_DestroyRenderer
     mov  rdi, rbx
     call SDL_DestroyWindow
+
+    ; Libera os sons
+    mov rdi, [snd_golpe]
+    test rdi, rdi
+    jz .sem_golpe
+    call Mix_FreeChunk
+
+.sem_golpe:
+
     call SDL_Quit
 
     add  rsp, 80          ; <- era 80
@@ -1384,6 +1441,47 @@ CarregarTextura:
     add  rsp, 16
 
     pop  rbx
+    ret
+
+; rdi = Mix_Chunk*
+TocarSom:
+    push r8
+    push r9
+    push r10
+    push r11
+    sub  rsp, 8                   ; 4 pushes (32) + ret (8) + 8 = alinhado
+
+    mov  rsi, rdi                 ; chunk
+    mov  edi, -1                  ; primeiro canal livre
+    xor  edx, edx                 ; loops = 0
+    mov  ecx, -1                  ; sem limite de tempo
+    call Mix_PlayChannelTimed
+
+    add  rsp, 8
+    pop  r11
+    pop  r10
+    pop  r9
+    pop  r8
+    ret
+
+; Entrada: rdi = caminho do arquivo
+; Saída: rax = Mix_Chunk*, ou 0 em caso de erro
+CarregarSom:
+    push rbx
+    lea rsi, [modo_leitura]
+    call SDL_RWFromFile
+    test rax, rax
+    jz .erro
+
+    mov rdi, rax
+    mov esi, 1
+    call Mix_LoadWAV_RW
+    jmp .fim
+
+.erro:
+    xor eax, eax
+.fim:
+    pop rbx
     ret
 
 section .note.GNU-stack noexec
