@@ -524,6 +524,14 @@ main:
         mov eax, 100                    ; Posiciona o rei na borda do outro lado
         mov [rei_x], eax                 
 
+        mov dword [percival_vivo], 1                    ; spawna boss 1
+        mov dword [boss_estado], BOSS_PERSEGUIR
+        mov dword [boss_frame], BOSS_FRAME_ANDANDO
+        mov dword [boss_contador], 0
+        mov dword [boss_rect], BOSS_INICIO_X
+        mov dword [boss_rect + 4], BOSS_INICIO_Y
+        call AtualizarPercivalHitbox
+        
         mov rdi, r15                     
         call SDL_DestroyTexture          
         
@@ -739,6 +747,9 @@ main:
     xor ecx, ecx
     call SDL_RenderCopy
 
+    cmp byte [cena_atual], 1        ; n desenha o boss se tiver em mapa 1
+    jne .pula_desenho_boss1
+
     ; O corpo continua visivel depois da morte, sem hitbox ativa.
     call PrepararDesenhoBoss     ; rdx = recorte/NULL, rcx = destino alinhado
     mov  rdi, r12
@@ -747,6 +758,7 @@ main:
     mov  rsi, [rsi + rax*8]
     call SDL_RenderCopy
     
+.pula_desenho_boss1:
     ; x = posição do rei + metade da diferença de largura
     mov eax, [rei_x]
     mov ecx, [idle_w]
@@ -1148,7 +1160,7 @@ ReiniciarPartida:
     mov  dword [boss_dash_vx], 0
     mov  dword [boss_dash_vy], 0
     mov  dword [boss_meio_passo], 0
-    mov  dword [percival_vivo], 1
+    mov  dword [percival_vivo], 0           ; boss 1 incialmente morto, att quando trocar de cena
     jmp  AtualizarPercivalHitbox
 
 ; Alinha as novas poses pelos pes, mantendo a escala original dos pixels.
