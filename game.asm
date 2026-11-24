@@ -80,7 +80,7 @@ PLAYER_ATAQUE_INTERVALO equ 20  ; quadros entre o inicio de dois ataques
 BOSS_HITBOX_X equ 100
 BOSS_HITBOX_Y equ 50
 
-WALL1_X equ 0       ; obstaculo teste
+WALL1_X equ 0       ; parede esquerda
 WALL1_Y equ 0
 WALL1_A equ 450
 WALL1_L equ 40
@@ -88,7 +88,12 @@ WALL1_L equ 40
 WALL2_X equ 0       
 WALL2_Y equ 0
 WALL2_A equ 30
-WALL2_L equ 800
+WALL2_L equ 370
+
+WALL5_X equ 430   
+WALL5_Y equ 0
+WALL5_A equ 30
+WALL5_L equ 370
 
 WALL3_X equ 0       
 WALL3_Y equ 420
@@ -97,13 +102,8 @@ WALL3_L equ 800
 
 WALL4_X equ 770     
 WALL4_Y equ 0
-WALL4_A equ 210
+WALL4_A equ 450
 WALL4_L equ 30
-
-WALL5_X equ 770     
-WALL5_Y equ 250
-WALL5_A equ 225
-WALL5_L equ 30
 
 ROCK_X  equ 54
 ROCK_Y  equ 69
@@ -513,34 +513,8 @@ main:
     mov  ecx, W
     sub  ecx, BOXREI_L               ; x máximo trocado [tex_w] -> BOXREI_L
     cmp  eax, ecx
-    jle  .x_max_ok
-    cmp byte [cena_atual], 0        
-    je .trocar_cena2
-    mov  eax, ecx                   ; passou da direita: x = máximo
-    jmp .x_max_ok
-
-    .trocar_cena2:
-        mov byte [cena_atual], 1        ; troca o byte do mapa
-        mov eax, 100                    ; Posiciona o rei na borda do outro lado
-        mov [rei_x], eax                 
-
-        mov dword [percival_vivo], 1                    ; spawna boss 1
-        mov dword [boss_estado], BOSS_PERSEGUIR
-        mov dword [boss_frame], BOSS_FRAME_ANDANDO
-        mov dword [boss_contador], 0
-        mov dword [boss_rect], BOSS_INICIO_X
-        mov dword [boss_rect + 4], BOSS_INICIO_Y
-        call AtualizarPercivalHitbox
-        
-        mov rdi, r15                     
-        call SDL_DestroyTexture          
-        
-        lea rdi, [img_file2]            
-        call CarregarTextura             
-        mov r15, rax                     
-        
-        jmp .y_limit_start               
-
+    jle  .x_max_ok       
+    mov  eax, ecx                   ; passou da direita: x = máximo          
 .x_max_ok:
     mov  [rei_x], eax
 
@@ -549,7 +523,33 @@ main:
     mov  eax, [rei_y]
     test eax, eax
     jge  .y_min_ok
+    cmp byte [cena_atual], 0  ; vê se tá no mapa 0 
+    je .trocar_cena2            ; troca cena
     xor  eax, eax
+    jmp .y_min_ok
+
+.trocar_cena2:
+    mov byte [cena_atual], 1        
+    mov dword [rei_x], W / 2 - BOXREI_L / 2   
+    mov dword [rei_y], H - BOXREI_A - 40
+
+    mov dword [percival_vivo], 1    ; spawna boss 1
+    mov dword [boss_estado], BOSS_PERSEGUIR
+    mov dword [boss_frame], BOSS_FRAME_ANDANDO
+    mov dword [boss_contador], 0
+    mov dword [boss_rect], BOSS_INICIO_X
+    mov dword [boss_rect + 4], BOSS_INICIO_Y
+    call AtualizarPercivalHitbox
+    
+    mov rdi, r15                     
+    call SDL_DestroyTexture          
+    
+    lea rdi, [img_file2]            
+    call CarregarTextura             
+    mov r15, rax                     
+    
+    jmp .sem_colisao_boss
+
 .y_min_ok:
     mov  ecx, H
     sub  ecx, BOXREI_A              
