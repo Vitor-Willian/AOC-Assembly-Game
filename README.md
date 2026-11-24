@@ -1,5 +1,35 @@
 # AOC-Assembly-Game
 
+## Controles e reinicio
+
+- **WASD**: movimentar o rei.
+- **Setas**: atacar na direcao indicada.
+- **R** (desenvolvimento): reiniciar a partida a qualquer momento, inclusive depois de morrer
+  ou derrotar o boss, sem fechar a janela. Manter a tecla pressionada nao
+  dispara reinicios repetidos.
+- **I** (desenvolvimento): ligar/desligar a imunidade ao dano do boss, incluindo
+  o dash. A colisao fisica continua ativa. Funciona com o rei vivo e nao revive
+  um personagem morto. Segurar a tecla nao alterna repetidamente.
+- **Esc**: sair.
+
+O reinicio restaura o primeiro cenario, as posicoes iniciais, os personagens
+vivos e os temporizadores de movimento e ataque. Tanto ao abrir quanto ao
+reiniciar, o rei aparece no lado esquerdo e o boss no lado direito, na altura
+central do mapa. O rei morto usa
+`assets/sprites/Rei-morte.bmp`; o boss derrotado permanece no chao com
+`boss1morte.bmp`, sem movimento, dano ou colisao.
+
+### Remover os atalhos de desenvolvimento
+
+No inicio de `game.asm`, altere `%define DESENVOLVIMENTO 1` para
+`%define DESENVOLVIMENTO 0` e recompile com `make`. Isso exclui da compilacao
+os atalhos **I** e **R**, a variavel e a verificacao de imunidade, e as dicas
+desses atalhos no titulo da janela. A inicializacao normal do jogo permanece.
+
+A imunidade comeca desligada e volta a ficar desligada ao reiniciar com **R**.
+O titulo da janela indica o estado atual. Para reativar os recursos de teste,
+volte a configuracao para `1` e recompile.
+
 ## Primeiro boss: ciclo de ataque
 
 O boss persegue o jogador com metade da velocidade do player. Depois de um
@@ -21,15 +51,13 @@ vulneravel e a tela de 512 x 512 da morte. Os recortes estao em
 `boss_vulneravel_src` e `boss_morte_src`; se o desenho mudar de lugar no arquivo,
 esses retangulos precisam acompanhar a alteracao.
 
-O estado `BOSS_MORTO` esta preparado: o sistema de dano devera definir
-`boss_estado` para esse valor quando o boss for derrotado. Ainda nao existe
-uma condicao de morte automatica, pois vida e dano nao foram implementados.
+Um ataque que acerta o boss durante a vulnerabilidade ativa `BOSS_MORTO`.
+O contato com o boss vivo derrota o rei e interrompe o combate ate reiniciar.
 
 O alcance inicial e `BOSS_DASH_DISTANCIA = 180` pixels. A direcao e calculada
 quando o dash comeca e fica fixa durante o avanco. A distancia e a mesma nas
 diagonais; contato com o jogador ou com o limite da arena interrompe o dash e
-inicia a vulnerabilidade. Ainda nao ha dano nem tratamento de pedra/fogueira
-para o dash. A vulnerabilidade identifica o estado para integrar o dano depois.
+inicia a vulnerabilidade. Ainda nao ha tratamento de pedra/fogueira para o dash.
 
 A espera de 4 s recomeca somente quando a vulnerabilidade termina. Um ciclo
 completo sem interrupcao dura aproximadamente 6,8 s. Os tempos usam contagem
@@ -195,4 +223,4 @@ soma:
 ; uso:  
     mov rdi, 3  
     mov rsi, 4  
-    call soma        ; rax = 7  
+    call soma        ; rax = 7
