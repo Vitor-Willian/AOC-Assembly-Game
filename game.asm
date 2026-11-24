@@ -80,7 +80,7 @@ PLAYER_ATAQUE_INTERVALO equ 20  ; quadros entre o inicio de dois ataques
 BOSS_HITBOX_X equ 100
 BOSS_HITBOX_Y equ 50
 
-WALL1_X equ 0       ; obstaculo teste
+WALL1_X equ 0       ; parede esquerda
 WALL1_Y equ 0
 WALL1_A equ 450
 WALL1_L equ 40
@@ -88,7 +88,12 @@ WALL1_L equ 40
 WALL2_X equ 0       
 WALL2_Y equ 0
 WALL2_A equ 30
-WALL2_L equ 800
+WALL2_L equ 380
+
+WALL5_X equ 435   
+WALL5_Y equ 0
+WALL5_A equ 30
+WALL5_L equ 370
 
 WALL3_X equ 0       
 WALL3_Y equ 420
@@ -97,18 +102,8 @@ WALL3_L equ 800
 
 WALL4_X equ 770     
 WALL4_Y equ 0
-WALL4_A equ 210
+WALL4_A equ 450
 WALL4_L equ 30
-
-WALL5_X equ 770     
-WALL5_Y equ 250
-WALL5_A equ 225
-WALL5_L equ 30
-
-ROCK_X  equ 54
-ROCK_Y  equ 69
-ROCK_A  equ 40
-ROCK_L  equ 35
 
 CAMP_X  equ 410
 CAMP_Y  equ 245
@@ -513,26 +508,8 @@ main:
     mov  ecx, W
     sub  ecx, BOXREI_L               ; x máximo trocado [tex_w] -> BOXREI_L
     cmp  eax, ecx
-    jle  .x_max_ok
-    cmp byte [cena_atual], 0        
-    je .trocar_cena2
-    mov  eax, ecx                   ; passou da direita: x = máximo
-    jmp .x_max_ok
-
-    .trocar_cena2:
-        mov byte [cena_atual], 1        ; troca o byte do mapa
-        mov eax, 100                    ; Posiciona o rei na borda do outro lado
-        mov [rei_x], eax                 
-
-        mov rdi, r15                     
-        call SDL_DestroyTexture          
-        
-        lea rdi, [img_file2]            
-        call CarregarTextura             
-        mov r15, rax                     
-        
-        jmp .y_limit_start               
-
+    jle  .x_max_ok       
+    mov  eax, ecx                   ; passou da direita: x = máximo          
 .x_max_ok:
     mov  [rei_x], eax
 
@@ -541,7 +518,33 @@ main:
     mov  eax, [rei_y]
     test eax, eax
     jge  .y_min_ok
+    cmp byte [cena_atual], 0  ; vê se tá no mapa 0 
+    je .trocar_cena2            ; troca cena
     xor  eax, eax
+    jmp .y_min_ok
+
+.trocar_cena2:
+    mov byte [cena_atual], 1        
+    mov dword [rei_x], W / 2 - BOXREI_L / 2   
+    mov dword [rei_y], H - BOXREI_A - 40
+
+    mov dword [percival_vivo], 1    ; spawna boss 1
+    mov dword [boss_estado], BOSS_PERSEGUIR
+    mov dword [boss_frame], BOSS_FRAME_ANDANDO
+    mov dword [boss_contador], 0
+    mov dword [boss_rect], BOSS_INICIO_X
+    mov dword [boss_rect + 4], BOSS_INICIO_Y
+    call AtualizarPercivalHitbox
+    
+    mov rdi, r15                     
+    call SDL_DestroyTexture          
+    
+    lea rdi, [img_file2]            
+    call CarregarTextura             
+    mov r15, rax                     
+    
+    jmp .sem_colisao_boss
+
 .y_min_ok:
     mov  ecx, H
     sub  ecx, BOXREI_A              
@@ -602,14 +605,6 @@ main:
     mov esi, WALL5_Y
     mov edx, WALL5_L
     mov ecx, WALL5_A
-    call TestaColisao
-    cmp rax, 1
-    je .houve_colisao
-
-    mov edi, ROCK_X
-    mov esi, ROCK_Y
-    mov edx, ROCK_L
-    mov ecx, ROCK_A
     call TestaColisao
     cmp rax, 1
     je .houve_colisao
@@ -739,6 +734,9 @@ main:
     xor ecx, ecx
     call SDL_RenderCopy
 
+    cmp byte [cena_atual], 1        ; n desenha o boss se tiver em mapa 1
+    jne .pula_desenho_boss1
+
     ; O corpo continua visivel depois da morte, sem hitbox ativa.
     call PrepararDesenhoBoss     ; rdx = recorte/NULL, rcx = destino alinhado
     mov  rdi, r12
@@ -747,6 +745,7 @@ main:
     mov  rsi, [rsi + rax*8]
     call SDL_RenderCopy
     
+.pula_desenho_boss1:
     ; x = posição do rei + metade da diferença de largura
     mov eax, [rei_x]
     mov ecx, [idle_w]
@@ -1047,15 +1046,6 @@ main:
     lea rsi, [rsp+64]
     call SDL_RenderDrawRect
 
-    mov dword [rsp+64], ROCK_X
-    mov dword [rsp+68], ROCK_Y
-    mov dword [rsp+72], ROCK_L
-    mov dword [rsp+76], ROCK_A
-
-    mov rdi, r12
-    lea rsi, [rsp+64]
-    call SDL_RenderDrawRect
-
     mov dword [rsp+64], CAMP_X
     mov dword [rsp+68], CAMP_Y
     mov dword [rsp+72], CAMP_L
@@ -1148,7 +1138,7 @@ ReiniciarPartida:
     mov  dword [boss_dash_vx], 0
     mov  dword [boss_dash_vy], 0
     mov  dword [boss_meio_passo], 0
-    mov  dword [percival_vivo], 1
+    mov  dword [percival_vivo], 0           ; boss 1 incialmente morto, att quando trocar de cena
     jmp  AtualizarPercivalHitbox
 
 ; Alinha as novas poses pelos pes, mantendo a escala original dos pixels.
