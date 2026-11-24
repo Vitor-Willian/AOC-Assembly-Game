@@ -88,9 +88,9 @@ WALL1_L equ 40
 WALL2_X equ 0       
 WALL2_Y equ 0
 WALL2_A equ 30
-WALL2_L equ 370
+WALL2_L equ 380
 
-WALL5_X equ 430   
+WALL5_X equ 435   
 WALL5_Y equ 0
 WALL5_A equ 30
 WALL5_L equ 370
@@ -104,11 +104,6 @@ WALL4_X equ 770
 WALL4_Y equ 0
 WALL4_A equ 450
 WALL4_L equ 30
-
-ROCK_X  equ 54
-ROCK_Y  equ 69
-ROCK_A  equ 40
-ROCK_L  equ 35
 
 CAMP_X  equ 410
 CAMP_Y  equ 245
@@ -614,14 +609,6 @@ main:
     cmp rax, 1
     je .houve_colisao
 
-    mov edi, ROCK_X
-    mov esi, ROCK_Y
-    mov edx, ROCK_L
-    mov ecx, ROCK_A
-    call TestaColisao
-    cmp rax, 1
-    je .houve_colisao
-
     mov edi, CAMP_X
     mov esi, CAMP_Y
     mov edx, CAMP_L
@@ -1054,15 +1041,6 @@ main:
     mov dword [rsp+68], WALL5_Y
     mov dword [rsp+72], WALL5_L
     mov dword [rsp+76], WALL5_A
-
-    mov rdi, r12
-    lea rsi, [rsp+64]
-    call SDL_RenderDrawRect
-
-    mov dword [rsp+64], ROCK_X
-    mov dword [rsp+68], ROCK_Y
-    mov dword [rsp+72], ROCK_L
-    mov dword [rsp+76], ROCK_A
 
     mov rdi, r12
     lea rsi, [rsp+64]
