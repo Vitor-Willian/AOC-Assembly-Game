@@ -4,9 +4,12 @@
 
 - **WASD**: movimentar o rei.
 - **Setas**: atacar na direcao indicada.
-- **R**: reiniciar a partida a qualquer momento, inclusive depois de morrer
+- **R** (desenvolvimento): reiniciar a partida a qualquer momento, inclusive depois de morrer
   ou derrotar o boss, sem fechar a janela. Manter a tecla pressionada nao
   dispara reinicios repetidos.
+- **I** (desenvolvimento): ligar/desligar a imunidade ao dano do boss, incluindo
+  o dash. A colisao fisica continua ativa. Funciona com o rei vivo e nao revive
+  um personagem morto. Segurar a tecla nao alterna repetidamente.
 - **Esc**: sair.
 
 O reinicio restaura o primeiro cenario, as posicoes iniciais, os personagens
@@ -15,6 +18,17 @@ reiniciar, o rei aparece no lado esquerdo e o boss no lado direito, na altura
 central do mapa. O rei morto usa
 `assets/sprites/Rei-morte.bmp`; o boss derrotado permanece no chao com
 `boss1morte.bmp`, sem movimento, dano ou colisao.
+
+### Remover os atalhos de desenvolvimento
+
+No inicio de `game.asm`, altere `%define DESENVOLVIMENTO 1` para
+`%define DESENVOLVIMENTO 0` e recompile com `make`. Isso exclui da compilacao
+os atalhos **I** e **R**, a variavel e a verificacao de imunidade, e as dicas
+desses atalhos no titulo da janela. A inicializacao normal do jogo permanece.
+
+A imunidade comeca desligada e volta a ficar desligada ao reiniciar com **R**.
+O titulo da janela indica o estado atual. Para reativar os recursos de teste,
+volte a configuracao para `1` e recompile.
 
 ## Primeiro boss: ciclo de ataque
 

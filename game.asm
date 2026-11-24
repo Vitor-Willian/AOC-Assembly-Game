@@ -1,4 +1,7 @@
 default rel
+; Mude para 0 e recompile para remover os atalhos I/R e a imunidade de teste.
+%define DESENVOLVIMENTO 1
+
 extern SDL_SetWindowTitle
 extern SDL_RenderSetLogicalSize
 extern SDL_GetKeyboardState
@@ -28,7 +31,10 @@ SC_W   equ 26       ; scancodes (posição física da tecla)
 SC_A   equ 4
 SC_S   equ 22
 SC_D   equ 7
-SC_R   equ 21       ; reinicia a partida
+%if DESENVOLVIMENTO
+SC_R   equ 21       ; reinicia a partida (somente desenvolvimento)
+SC_I   equ 12       ; alterna imunidade ao boss (somente desenvolvimento)
+%endif
 SC_LEFT  equ 80
 SC_RIGHT equ 79
 SC_UP    equ 82
@@ -112,8 +118,14 @@ CAMP_L  equ 25
 SWIPE_DIST equ 2
 
 section .data
-    titulo      db "O Retorno do Rei - R para reiniciar", 0
+%if DESENVOLVIMENTO
+    titulo      db "O Retorno do Rei - R: reiniciar | I: imunidade DESLIGADA", 0
+    titulo_imune db "O Retorno do Rei - R: reiniciar | I: imunidade LIGADA", 0
     titulo_derrota db "O Retorno do Rei - Voce morreu! R para reiniciar | ESC para sair", 0
+%else
+    titulo      db "O Retorno do Rei", 0
+    titulo_derrota db "O Retorno do Rei - Voce morreu! ESC para sair", 0
+%endif
     rei_bmp db "assets/sprites/Rei.bmp", 0
     rei_morte_bmp db "assets/sprites/Rei-morte.bmp", 0
     reiC1_bmp db "assets/sprites/Rei C1.bmp", 0
@@ -185,6 +197,9 @@ section .bss
     walk_delay    equ 8    ; trocar de frame a cada X quadros
 
     rei_morto     resd 1   ; 1 = derrotado por contato com o boss
+%if DESENVOLVIMENTO
+    dev_imune     resd 1   ; 1 = ignora dano do boss, sem remover a colisao
+%endif
     rei_x         resd 1   ; posisão x hitbox
     rei_y         resd 1   ; posisão y hitbox
 
@@ -347,10 +362,25 @@ main:
     jne  .eventos
     cmp  dword [rsp+20], SDLK_ESCAPE    ; era o ESC?
     je   .fim
+%if DESENVOLVIMENTO
+    cmp  byte [rsp+13], 0              ; uma acao por pressionamento, sem repeticao
+    jne  .eventos
     cmp  dword [rsp+16], SC_R          ; scancode de R, inclusive com Shift
+    je   .reiniciar
+    cmp  dword [rsp+16], SC_I
     jne  .eventos
-    cmp  byte [rsp+13], 0              ; ignora repeticao ao manter R pressionado
+    cmp  dword [rei_morto], 0          ; imunidade nao revive o rei
     jne  .eventos
+    xor  dword [dev_imune], 1
+    mov  rdi, rbx
+    lea  rsi, [titulo]
+    cmp  dword [dev_imune], 0
+    je   .dev_atualiza_titulo
+    lea  rsi, [titulo_imune]
+.dev_atualiza_titulo:
+    call SDL_SetWindowTitle
+%endif
+    jmp  .eventos
 
 .reiniciar:
     ; Reutiliza janela e sprites; so restaura o fundo se mudou de cenario.
@@ -1091,6 +1121,9 @@ main:
 ; Estado inicial compartilhado pela abertura do jogo e pela tecla R.
 ; Preserva as texturas, suas dimensoes e os registradores de main.
 ReiniciarPartida:
+%if DESENVOLVIMENTO
+    mov  dword [dev_imune], 0
+%endif
     mov  byte [cena_atual], 0
     mov  dword [rei_morto], 0
     mov  dword [rei_x], REI_INICIO_X
@@ -1392,7 +1425,12 @@ TestaContatoBoss:
     add r10d, BOXREI_A
     cmp r10d, esi
     jl .fim
+%if DESENVOLVIMENTO
+    cmp dword [dev_imune], 0
+    jne .contato
+%endif
     mov dword [rei_morto], 1
+.contato:
     mov eax, 1
 .fim:
     ret
