@@ -1293,6 +1293,10 @@ PrepararDesenhoBoss:
 
 ; Apenas a perseguicao move normalmente. Carga e vulnerabilidade ficam paradas.
 AtualizarBoss:
+    cmp  dword [percival_vivo], 1
+    je   .ativo
+    ret                         ; boss ausente (cena 0) ou morto: nada a atualizar
+.ativo:
     sub  rsp, 8                 ; alinhamento System V antes das chamadas
     cmp  dword [boss_estado], BOSS_MORTO
     je   .morto
@@ -1540,7 +1544,7 @@ TestaContatoBoss:
     jl .fim
     call AplicarDanoRei
     mov eax, 1
-    
+
 .fim:
     ret
 
