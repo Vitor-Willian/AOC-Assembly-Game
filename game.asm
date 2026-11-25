@@ -175,7 +175,7 @@ section .data
     modo_leitura db "rb", 0
     img_mode db "rb", 0
     img_file db "assets/background/chao.bmp", 0 
-    img_file2 db "assets/background/chao960.bmp", 0       ; novo mapa
+    img_file2 db "assets/background/chao2.bmp", 0       ; novo mapa
     cena_atual db 1             ; inicia na arena, junto com img_file2
 
     snd_golpe_f   db "assets/sounds/sfx/swipe_fix.wav", 0
