@@ -169,7 +169,12 @@ section .data
     img_file2 db "assets/background/chao2.bmp", 0       ; novo mapa
     cena_atual db 0
 
-    snd_golpe_f   db "assets/sounds/sfx/swipe_fix.wav", 0
+    snd_golpe_f   db "assets/sounds/sfx/swipe.wav", 0
+    player_dmg_f db "assets/sounds/sfx/player_dmg.wav", 0
+
+    percival_load_f db "assets/sounds/sfx/percival_load.wav", 0
+    percival_dash_f db "assets/sounds/sfx/percival_dash.wav", 0
+    boss_death_f db "assets/sounds/sfx/boss_death.wav", 0
 
     percival_theme_f      db "assets/sounds/music/Percival.ogg", 0   ; ajuste nome e pasta
 
