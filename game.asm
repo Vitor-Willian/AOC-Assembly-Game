@@ -6,7 +6,7 @@ extern SDL_SetWindowTitle
 extern SDL_RenderSetLogicalSize
 extern SDL_GetKeyboardState
 
-extern Mix_OpenAudio, Mix_LoadWAV_RW, Mix_LoadMUS
+extern Mix_OpenAudio, Mix_LoadWAV_RW, Mix_LoadMUS, Mix_HaltMusic
 extern Mix_PlayChannelTimed, Mix_PlayMusic, Mix_VolumeMusic, Mix_PlayChannel
 extern Mix_FreeChunk, Mix_FreeMusic, Mix_CloseAudio
 extern Mix_AllocateChannels
@@ -394,20 +394,18 @@ main:
     cmp  r13d, SFX_TOTAL
     jl   .carrega_sfx
 
-     ; Música de fundo
+    ; Música de fundo: carrega as faixas; TrocarMusica decide qual toca.
+    ; Se um arquivo faltar, rax = 0 e TrocarMusica vira silencio.
     lea  rdi, [bonfire_theme_f]
-    call Mix_LoadMUS             ; já recebe o caminho direto, sem RWFromFile
+    call Mix_LoadMUS
     mov  [bonfire_theme], rax
-    test rax, rax
-    jz   .sem_musica             ; arquivo não encontrado: segue sem música
 
-    mov  rdi, rax                ; Mix_Music*
-    mov  esi, -1                 ; -1 = loop infinito
-    call Mix_PlayMusic
+    lea  rdi, [percival_theme_f]
+    call Mix_LoadMUS
+    mov  [percival_theme], rax
 
-    mov  edi, 40                 ; volume da música (0 a 128)
+    mov  edi, 40                 ; volume global da música (0 a 128)
     call Mix_VolumeMusic
-.sem_musica:
 
     ; pega o tamanho real da imagem, para não distorcer o sprite
     mov  rdi, r14
@@ -472,6 +470,8 @@ main:
     mov  r15, rax
 .reiniciar_estado:
     call ReiniciarPartida
+    mov  rdi, [bonfire_theme]      
+    call TrocarMusica              
     mov  r14, [king_idle]
     mov  rdi, rbx
     lea  rsi, [titulo]
@@ -626,6 +626,9 @@ main:
     mov dword [boss_rect + 4], BOSS_INICIO_Y
     call AtualizarPercivalHitbox
     
+    mov  rdi, [percival_theme]     ; <-- NOVO
+    call TrocarMusica              ; <-- NOVO
+
     mov rdi, r15                     
     call SDL_DestroyTexture          
     
@@ -1206,10 +1209,18 @@ main:
 
     mov  rdi, [bonfire_theme]
     test rdi, rdi
-    jz   .sem_free_musica
+    jz   .sem_free_bonfire
     call Mix_FreeMusic
 
-.sem_free_musica:
+.sem_free_bonfire:
+
+        mov  rdi, [percival_theme]
+    test rdi, rdi
+    jz   .sem_free_percival
+    call Mix_FreeMusic
+
+.sem_free_percival:
+
 
     call SDL_Quit
 
@@ -1638,6 +1649,8 @@ BossAttacked:
 BossDied:
     mov rdi , [snd_boss_death] ; Som da morte
     call TocarSom
+    xor  edi, edi                  ; <-- NOVO: 0 = silencio
+    call TrocarMusica              ; <-- NOVO
     mov dword [boss_estado], BOSS_MORTO
     mov dword [boss_frame], BOSS_FRAME_MORTE
     mov dword [boss_contador], 0
@@ -1670,6 +1683,34 @@ CarregarTextura:
     add  rsp, 16
 
     pop  rbx
+    ret
+
+; rdi = Mix_Music* a tocar em loop; rdi = 0 para parar a musica (silencio).
+; Preserva r8-r11. Destroi rax, rcx, rdx, rsi, rdi.
+TrocarMusica:
+    push rbp
+    mov  rbp, rsp
+    push r8
+    push r9
+    push r10
+    push r11
+    and  rsp, -16                 ; alinha em 16 independente de quem chamou
+
+    test rdi, rdi
+    jz   .silencio
+    mov  esi, -1                  ; -1 = loop infinito
+    call Mix_PlayMusic            ; troca a faixa atual, se houver
+    jmp  .fim
+.silencio:
+    call Mix_HaltMusic
+
+.fim:
+    lea  rsp, [rbp - 32]
+    pop  r11
+    pop  r10
+    pop  r9
+    pop  r8
+    pop  rbp
     ret
 
 ; rdi = Mix_Chunk* (pode ser 0: nao faz nada)
