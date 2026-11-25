@@ -80,13 +80,22 @@ BOSS_PE_Y equ 100               ; linha dos pes nas sprites de movimento/ataque
 BOSS_INICIO_X equ W * 4 / 5 - BOSS_CENTRO_X
 BOSS_INICIO_Y equ H / 2 - BOSS_CENTRO_Y
 BOSS_ESPERA_QUADROS equ 160       ; cerca de 4 s perseguindo entre ataques
-BOSS_CARGA_POR_FRAME equ 5       ; ataque1 a ataque6: cerca de 0,96 s no total
+BOSS_CARGA_POR_FRAME equ 2       ; ataque1 a ataque6: cerca de 0,96 s no total
 BOSS_DASH_QUADROS equ 15          ; cerca de 0,32 s, dash1 e dash2
 BOSS_DASH_DISTANCIA equ 170       ; pixels, igual em qualquer direcao
-BOSS_VULNERAVEL_QUADROS equ 20    ; cerca de 0,75 s com a sprite vulneravel
+BOSS_VULNERAVEL_QUADROS equ 10    ; cerca de 0,75 s com a sprite vulneravel
 PLAYER_ATAQUE_INTERVALO equ 20  ; quadros entre o inicio de dois ataques
 BOSS_HITBOX_X equ 100
 BOSS_HITBOX_Y equ 50
+
+; Introducao: frames ataque4, ataque5 e ataque6, sem combate.
+INTRO_BOSS_FRAME_INICIAL equ BOSS_FRAME_CARGA + 3
+INTRO_BOSS_POR_FRAME equ 25
+INTRO_BOSS_QUADROS equ INTRO_BOSS_POR_FRAME * 3
+INTRO_BOSS_BASE_Y equ 108        ; primeiro pixel abaixo dos pes nesses frames
+INTRO_REI_QUEDA_QUADROS equ 42
+INTRO_PAUSA_QUADROS equ 24
+INTRO_TOTAL_QUADROS equ INTRO_BOSS_QUADROS + INTRO_PAUSA_QUADROS
 
 WALL1_X equ 0       ; parede esquerda
 WALL1_Y equ 0
@@ -167,13 +176,19 @@ section .data
     img_mode db "rb", 0
     img_file db "assets/background/chao.bmp", 0 
     img_file2 db "assets/background/chao960.bmp", 0       ; novo mapa
-    cena_atual db 0
+    cena_atual db 1             ; inicia na arena, junto com img_file2
 
     snd_golpe_f   db "assets/sounds/sfx/swipe_fix.wav", 0
 
     percival_theme_f      db "assets/sounds/music/Percival.ogg", 0   ; ajuste nome e pasta
 
 section .bss
+    intro_ativa    resd 1
+    intro_contador resd 1
+    intro_rei_offset_y resd 1   ; deslocamento visual; hitbox fica no destino
+    intro_boss_offset_y resd 1  ; parte da sprite ainda abaixo do solo
+    intro_boss_src resd 4       ; recorte da parte acima do solo, sem esticar
+
     tex_w         resd 1   ; largura da imagem (preenchido por SDL_QueryTexture)
     tex_h         resd 1   ; altura da imagem
     idle_w        resd 1   ; largura do sprite parado
@@ -276,7 +291,7 @@ main:
 
     ; ---- chão ----
 
-    lea  rdi, [img_file]
+    lea  rdi, [img_file2]        ; sem menu: abre diretamente na arena do boss
     call CarregarTextura
     mov  r15, rax                   ; r15 = textura do chão
 
@@ -437,11 +452,11 @@ main:
 
 .reiniciar:
     ; Reutiliza janela e sprites; so restaura o fundo se mudou de cenario.
-    cmp  byte [cena_atual], 0
+    cmp  byte [cena_atual], 1
     je   .reiniciar_estado
     mov  rdi, r15
     call SDL_DestroyTexture
-    lea  rdi, [img_file]
+    lea  rdi, [img_file2]
     call CarregarTextura
     mov  r15, rax
 .reiniciar_estado:
@@ -453,6 +468,12 @@ main:
     jmp  .eventos
 
 .teclado:
+    cmp dword [intro_ativa], 0
+    je .jogando
+    call AtualizarEntradaArena
+    mov r14, [king_idle]
+    jmp .desenha                 ; sem movimento, ataque, colisao ou IA na entrada
+.jogando:
     cmp dword [rei_morto], 0
     jne .rei_derrotado
     cmp dword [ataque_cooldown], 0
@@ -588,17 +609,7 @@ main:
     jmp .y_min_ok
 
 .trocar_cena2:
-    mov byte [cena_atual], 1        
-    mov dword [rei_x], W / 2 - BOXREI_L / 2   
-    mov dword [rei_y], H - BOXREI_A - 40
-
-    mov dword [percival_vivo], 1    ; spawna boss 1
-    mov dword [boss_estado], BOSS_PERSEGUIR
-    mov dword [boss_frame], BOSS_FRAME_ANDANDO
-    mov dword [boss_contador], 0
-    mov dword [boss_rect], BOSS_INICIO_X
-    mov dword [boss_rect + 4], BOSS_INICIO_Y
-    call AtualizarPercivalHitbox
+    call ReiniciarPartida          ; mesma entrada caso o mapa inicial seja usado
     
     mov rdi, r15                     
     call SDL_DestroyTexture          
@@ -607,7 +618,7 @@ main:
     call CarregarTextura             
     mov r15, rax                     
     
-    jmp .sem_colisao_boss
+    jmp .teclado
 
 .y_min_ok:
     mov  ecx, H
@@ -800,6 +811,11 @@ main:
 
     cmp byte [cena_atual], 1        ; n desenha o boss se tiver em mapa 1
     jne .pula_desenho_boss1
+    cmp dword [intro_ativa], 0
+    je .desenha_boss1
+    cmp dword [intro_boss_offset_y], INTRO_BOSS_BASE_Y
+    jae .pula_desenho_boss1         ; completamente abaixo do solo
+.desenha_boss1:
 
     ; O corpo continua visivel depois da morte, sem hitbox ativa.
     call PrepararDesenhoBoss     ; rdx = recorte/NULL, rcx = destino alinhado
@@ -824,6 +840,7 @@ main:
     sub ecx, [tex_h]
     sar ecx, 1
     add eax, ecx
+    add eax, [intro_rei_offset_y]   ; queda visual, sem mover a hitbox pelo cenario
     mov [rsp+68], eax
 
     ; desenha usando o tamanho real do sprite atual
@@ -838,6 +855,10 @@ main:
     xor  edx, edx                 ; srcrect = NULL -> usa a imagem inteira
     lea  rcx, [rsp+64]            ; dstrect
     call SDL_RenderCopy
+
+    ; Oculta as hitboxes de depuracao durante a apresentacao.
+    cmp dword [intro_ativa], 0
+    jne .apresenta_quadro
 
     ; Se houver swipe, desenha o efeito de ataque
     cmp qword [swipe_atual], 0
@@ -1119,6 +1140,7 @@ main:
     lea rsi, [rsp+64]
     call SDL_RenderDrawRect
 
+.apresenta_quadro:
     ;Restaura a cor do pincel para Preto, senão a tela piscará vermelho no próximo frame
     mov rdi, r12
     xor esi, esi
@@ -1194,7 +1216,7 @@ ReiniciarPartida:
 %if DESENVOLVIMENTO
     mov  dword [dev_imune], 0
 %endif
-    mov  byte [cena_atual], 0
+    mov  byte [cena_atual], 1     ; arena do boss; futuro botao Jogar usa esta rotina
     mov  dword [rei_morto], 0
     mov  dword [rei_x], REI_INICIO_X
     mov  dword [rei_y], REI_INICIO_Y
@@ -1218,8 +1240,68 @@ ReiniciarPartida:
     mov  dword [boss_dash_vx], 0
     mov  dword [boss_dash_vy], 0
     mov  dword [boss_meio_passo], 0
-    mov  dword [percival_vivo], 0           ; boss 1 incialmente morto, att quando trocar de cena
+    mov  dword [percival_vivo], 1
+    ; Todo reinicio repete a introducao, inclusive com R durante a animacao.
+    mov  dword [intro_ativa], 1
+    mov  dword [intro_contador], 0
+    mov  eax, REI_INICIO_Y
+    add  eax, [idle_h]
+    neg  eax
+    mov  [intro_rei_offset_y], eax
+    mov  dword [intro_boss_offset_y], INTRO_BOSS_BASE_Y
+    mov  dword [boss_frame], INTRO_BOSS_FRAME_INICIAL
     jmp  AtualizarPercivalHitbox
+
+; Animacao em quadros, usando o loop normal para manter eventos e ESC responsivos.
+; Nao altera posicoes/hitboxes nem consome a espera do primeiro ataque do boss.
+AtualizarEntradaArena:
+    inc  dword [intro_contador]
+    mov  ecx, [intro_contador]
+
+    ; Queda acelerada: deslocamento proporcional a t^2, limitado ao ponto de pouso.
+    mov  dword [intro_rei_offset_y], 0
+    cmp  ecx, INTRO_REI_QUEDA_QUADROS
+    jae  .boss
+    mov  eax, REI_INICIO_Y
+    add  eax, [idle_h]
+    mov  r8d, eax                ; distancia do topo da tela ate o pouso
+    imul eax, ecx
+    imul eax, ecx
+    xor  edx, edx
+    mov  r9d, INTRO_REI_QUEDA_QUADROS * INTRO_REI_QUEDA_QUADROS
+    div  r9d
+    sub  eax, r8d
+    mov  [intro_rei_offset_y], eax
+.boss:
+    mov  dword [intro_boss_offset_y], 0
+    mov  dword [boss_frame], INTRO_BOSS_FRAME_INICIAL + 2
+    cmp  ecx, INTRO_BOSS_QUADROS
+    jae  .pausa
+    ; Sobe mantendo o ponto de saida do solo fixo.
+    mov  eax, INTRO_BOSS_BASE_Y
+    imul eax, ecx
+    xor  edx, edx
+    mov  r9d, INTRO_BOSS_QUADROS
+    div  r9d
+    mov  edx, INTRO_BOSS_BASE_Y
+    sub  edx, eax
+    mov  [intro_boss_offset_y], edx
+    mov  eax, ecx
+    dec  eax                    ; cada uma das tres poses dura 24 quadros
+    xor  edx, edx
+    mov  r9d, INTRO_BOSS_POR_FRAME
+    div  r9d
+    add  eax, INTRO_BOSS_FRAME_INICIAL
+    mov  [boss_frame], eax
+.pausa:
+    cmp  ecx, INTRO_TOTAL_QUADROS
+    jb   .fim
+    mov  dword [intro_ativa], 0
+    mov  dword [boss_frame], BOSS_FRAME_ANDANDO
+    mov  dword [boss_estado], BOSS_PERSEGUIR
+    mov  dword [boss_contador], 0
+.fim:
+    ret
 
 ; Alinha as novas poses pelos pes, mantendo a escala original dos pixels.
 ; Retorna os argumentos srcrect (rdx) e dstrect (rcx) de SDL_RenderCopy.
@@ -1234,6 +1316,8 @@ PrepararDesenhoBoss:
     mov  eax, [boss_rect + 12]
     mov  [rcx + 12], eax
     xor  edx, edx
+    cmp  dword [intro_ativa], 0
+    jne  .entrada
     cmp  dword [boss_frame], BOSS_FRAME_VULNERAVEL
     je   .vulneravel
     cmp  dword [boss_frame], BOSS_FRAME_MORTE
@@ -1255,6 +1339,21 @@ PrepararDesenhoBoss:
     add  eax, BOSS_PE_Y
     add  [rcx + 4], eax
 .fim:
+    ret
+
+.entrada:
+    ; Revela apenas a parte acima do solo. Origem/destino com o mesmo tamanho.
+    lea  rdx, [intro_boss_src]
+    mov  dword [rdx], 0
+    mov  dword [rdx + 4], 0
+    mov  eax, [boss_rect + 8]
+    mov  [rdx + 8], eax
+    mov  eax, [intro_boss_offset_y]
+    add  [rcx + 4], eax
+    neg  eax
+    add  eax, INTRO_BOSS_BASE_Y
+    mov  [rdx + 12], eax
+    mov  [rcx + 12], eax
     ret
 
 ; Apenas a perseguicao move normalmente. Carga e vulnerabilidade ficam paradas.
