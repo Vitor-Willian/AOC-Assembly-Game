@@ -170,12 +170,18 @@ section .data
     cena_atual db 0
 
     ; SFX
-    snd_golpe_f   db "assets/sounds/sfx/swipe.wav", 0
-    player_dmg_f db "assets/sounds/sfx/player_dmg.wav", 0
+    snd_golpe_f      db "assets/sounds/sfx/swipe.wav", 0
+    player_dmg_f     db "assets/sounds/sfx/player_dmg.wav", 0
+    percival_load_f  db "assets/sounds/sfx/percival_load.wav", 0
+    percival_dash_f  db "assets/sounds/sfx/percival_dash.wav", 0
+    boss_death_f     db "assets/sounds/sfx/boss_death.wav", 0
 
-    percival_load_f db "assets/sounds/sfx/percival_load.wav", 0
-    percival_dash_f db "assets/sounds/sfx/percival_dash.wav", 0
-    boss_death_f db "assets/sounds/sfx/boss_death.wav", 0
+    SFX_TOTAL equ 5
+
+    sfx_arquivos dq snd_golpe_f, player_dmg_f, percival_load_f
+                 dq percival_dash_f, boss_death_f
+    sfx_destinos dq snd_golpe, snd_dmg, snd_percival_load
+                 dq snd_percival_dash, snd_boss_death
 
     ; Background music
     main_menu_f      db "assets/sounds/music/Main Menu.ogg", 0
@@ -376,18 +382,17 @@ main:
     mov  [atk_swipe_r], rax
 
     ; Sons e Musica
-    lea rdi, [snd_golpe_f]
-    call CarregarSom
-    mov [snd_golpe], rax
-    test rax, rax
-    jz .audio_indisponivel
-
-    jmp .audio_carregado
-
-.audio_indisponivel:
-        mov qword [snd_golpe], 0
-
-.audio_carregado:
+    xor  r13d, r13d
+.carrega_sfx:
+    lea  rax, [sfx_arquivos]
+    mov  rdi, [rax + r13*8]
+    call CarregarSom             ; rax = Mix_Chunk* ou 0
+    lea  rcx, [sfx_destinos]
+    mov  rcx, [rcx + r13*8]      ; rcx = endereco da variavel destino
+    mov  [rcx], rax              ; se falhou, guarda 0 (TocarSom ignora)
+    inc  r13d
+    cmp  r13d, SFX_TOTAL
+    jl   .carrega_sfx
 
      ; Música de fundo
     lea  rdi, [bonfire_theme_f]
@@ -1183,11 +1188,19 @@ main:
     mov  rdi, rbx
     call SDL_DestroyWindow
 
-    ; Libera os sons
-    mov rdi, [snd_golpe]
+    ; Libera os efeitos sonoros
+    xor  r13d, r13d
+.libera_sfx:
+    lea  rax, [sfx_destinos]
+    mov  rax, [rax + r13*8]
+    mov  rdi, [rax]
     test rdi, rdi
-    jz .sem_golpe
+    jz   .proximo_sfx
     call Mix_FreeChunk
+.proximo_sfx:
+    inc  r13d
+    cmp  r13d, SFX_TOTAL
+    jl   .libera_sfx
 
 .sem_golpe:
 
@@ -1301,6 +1314,8 @@ AtualizarBoss:
 .inicia_carga:
     mov  dword [boss_estado], BOSS_CARREGAR
     mov  dword [boss_contador], 0
+    mov rdi, [snd_percival_load] ; Som da carga
+    call TocarSom
 .carga:
     mov  eax, [boss_contador]
     cmp  eax, BOSS_CARGA_POR_FRAME * BOSS_CARGA_FRAMES
@@ -1350,6 +1365,8 @@ AtualizarBoss:
     movss [boss_dash_y], xmm1
     mov  dword [boss_estado], BOSS_DASH
     mov  dword [boss_contador], 0
+    mov rdi, [snd_percival_dash] ; som do dash
+    call TocarSom
 
 .dash:
     cmp  dword [boss_contador], BOSS_DASH_QUADROS
@@ -1516,13 +1533,29 @@ TestaContatoBoss:
     add r10d, BOXREI_A
     cmp r10d, esi
     jl .fim
-%if DESENVOLVIMENTO
-    cmp dword [dev_imune], 0
-    jne .contato
-%endif
-    mov dword [rei_morto], 1
-.contato:
+
+    mov r10d, [rei_y]
+    add r10d, BOXREI_A
+    cmp r10d, esi
+    jl .fim
+    call AplicarDanoRei
     mov eax, 1
+    
+.fim:
+    ret
+
+; Mata o rei (respeitando a imunidade de desenvolvimento) e toca o som
+; de dano uma unica vez.
+AplicarDanoRei:
+%if DESENVOLVIMENTO
+    cmp  dword [dev_imune], 0
+    jne  .fim
+%endif
+    cmp  dword [rei_morto], 0
+    jne  .fim
+    mov  dword [rei_morto], 1
+    mov  rdi, [snd_dmg]
+    jmp  TocarSom
 .fim:
     ret
 
@@ -1599,6 +1632,8 @@ BossAttacked:
     ret
 
 BossDied:
+    mov rdi , [snd_boss_death] ; Som da morte
+    call TocarSom
     mov dword [boss_estado], BOSS_MORTO
     mov dword [boss_frame], BOSS_FRAME_MORTE
     mov dword [boss_contador], 0
@@ -1633,13 +1668,19 @@ CarregarTextura:
     pop  rbx
     ret
 
-; rdi = Mix_Chunk*
+; rdi = Mix_Chunk* (pode ser 0: nao faz nada)
+; Preserva r8-r11 (usados como posicao anterior do rei/boss).
+; Destroi rax, rcx, rdx, rsi, rdi e xmm*.
 TocarSom:
+    test rdi, rdi
+    jz   .sem_som
+    push rbp
+    mov  rbp, rsp
     push r8
     push r9
     push r10
     push r11
-    sub  rsp, 8                   ; 4 pushes (32) + ret (8) + 8 = alinhado
+    and  rsp, -16                 ; alinha em 16 independente de quem chamou
 
     mov  rsi, rdi                 ; chunk
     mov  edi, -1                  ; primeiro canal livre
@@ -1647,11 +1688,13 @@ TocarSom:
     mov  ecx, -1                  ; sem limite de tempo
     call Mix_PlayChannelTimed
 
-    add  rsp, 8
+    lea  rsp, [rbp - 32]          ; volta para onde estavam os 4 pushes
     pop  r11
     pop  r10
     pop  r9
     pop  r8
+    pop  rbp
+.sem_som:
     ret
 
 ; Entrada: rdi = caminho do arquivo
