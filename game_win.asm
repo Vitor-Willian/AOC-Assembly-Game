@@ -11,6 +11,10 @@ default rel
     call %1
     add  rsp, 48
 %endmacro
+; Mude para 0 e recompile para remover os atalhos I/R e a imunidade de teste.
+%define DESENVOLVIMENTO 1
+
+extern SDL_SetWindowTitle
 extern SDL_RenderSetLogicalSize
 extern SDL_GetKeyboardState
 
@@ -47,6 +51,10 @@ SC_W   equ 26       ; scancodes (posição física da tecla)
 SC_A   equ 4
 SC_S   equ 22
 SC_D   equ 7
+%if DESENVOLVIMENTO
+SC_R   equ 21       ; reinicia a partida (somente desenvolvimento)
+SC_I   equ 12       ; alterna imunidade ao boss (somente desenvolvimento)
+%endif
 SC_LEFT  equ 80
 SC_RIGHT equ 79
 SC_UP    equ 82
@@ -54,6 +62,10 @@ SC_DOWN  equ 81
 
 BOXREI_A equ 30     ; altura da hitbox do rei 
 BOXREI_L equ 20     ; largura da hitbox
+
+; Rei no lado esquerdo, centralizado verticalmente pela hitbox.
+REI_INICIO_X equ W / 5 - BOXREI_L / 2
+REI_INICIO_Y equ (H - BOXREI_A) / 2
 
 BOSS_HITBOX_L equ 30  
 BOSS_HITBOX_A equ 50
@@ -76,15 +88,19 @@ BOSS_FRAME_VULNERAVEL equ 9
 BOSS_FRAME_MORTE equ 10
 BOSS_TOTAL_FRAMES equ 11
 BOSS_PE_Y equ 100               ; linha dos pes nas sprites de movimento/ataque
-BOSS_ESPERA_QUADROS equ 225       ; cerca de 4 s perseguindo entre ataques
+; Boss no lado direito; desconta as margens transparentes da sprite.
+BOSS_INICIO_X equ W * 4 / 5 - BOSS_CENTRO_X
+BOSS_INICIO_Y equ H / 2 - BOSS_CENTRO_Y
+BOSS_ESPERA_QUADROS equ 160       ; cerca de 4 s perseguindo entre ataques
 BOSS_CARGA_POR_FRAME equ 5       ; ataque1 a ataque6: cerca de 0,96 s no total
 BOSS_DASH_QUADROS equ 15          ; cerca de 0,32 s, dash1 e dash2
-BOSS_DASH_DISTANCIA equ 200       ; pixels, igual em qualquer direcao
-BOSS_VULNERAVEL_QUADROS equ 47    ; cerca de 0,75 s com a sprite vulneravel
+BOSS_DASH_DISTANCIA equ 170       ; pixels, igual em qualquer direcao
+BOSS_VULNERAVEL_QUADROS equ 20    ; cerca de 0,75 s com a sprite vulneravel
+PLAYER_ATAQUE_INTERVALO equ 20  ; quadros entre o inicio de dois ataques
 BOSS_HITBOX_X equ 100
 BOSS_HITBOX_Y equ 50
 
-WALL1_X equ 0       ; obstaculo teste
+WALL1_X equ 0       ; parede esquerda
 WALL1_Y equ 0
 WALL1_A equ 450
 WALL1_L equ 40
@@ -92,7 +108,12 @@ WALL1_L equ 40
 WALL2_X equ 0       
 WALL2_Y equ 0
 WALL2_A equ 30
-WALL2_L equ 800
+WALL2_L equ 380
+
+WALL5_X equ 435   
+WALL5_Y equ 0
+WALL5_A equ 30
+WALL5_L equ 370
 
 WALL3_X equ 0       
 WALL3_Y equ 420
@@ -101,18 +122,8 @@ WALL3_L equ 800
 
 WALL4_X equ 770     
 WALL4_Y equ 0
-WALL4_A equ 210
+WALL4_A equ 450
 WALL4_L equ 30
-
-WALL5_X equ 770     
-WALL5_Y equ 250
-WALL5_A equ 225
-WALL5_L equ 30
-
-ROCK_X  equ 54
-ROCK_Y  equ 69
-ROCK_A  equ 40
-ROCK_L  equ 35
 
 CAMP_X  equ 410
 CAMP_Y  equ 245
@@ -122,9 +133,16 @@ CAMP_L  equ 25
 SWIPE_DIST equ 2
 
 section .data
+%if DESENVOLVIMENTO
+    titulo      db "O Retorno do Rei - R: reiniciar | I: imunidade DESLIGADA", 0
+    titulo_imune db "O Retorno do Rei - R: reiniciar | I: imunidade LIGADA", 0
+    titulo_derrota db "O Retorno do Rei - Voce morreu! R para reiniciar | ESC para sair", 0
+%else
     titulo      db "O Retorno do Rei", 0
-
+    titulo_derrota db "O Retorno do Rei - Voce morreu! ESC para sair", 0
+%endif
     rei_bmp db "assets/sprites/Rei.bmp", 0
+    rei_morte_bmp db "assets/sprites/Rei-morte.bmp", 0
     reiC1_bmp db "assets/sprites/Rei C1.bmp", 0
     reiC2_bmp db "assets/sprites/Rei C2.bmp", 0
     reiAUp_bmp db "assets/sprites/Rei Atk Up.bmp", 0
@@ -156,18 +174,16 @@ section .data
     boss_vulneravel_src dd 38, 50, 46, 54
     boss_morte_src dd 34, 343, 28, 33
     ; Posicao da imagem completa; o corpo comeca 88 px a direita e 41 px abaixo.
-    boss_rect dd 284, 60, 0, 0    ; x, y, largura, altura (tamanho original)
-    
+    boss_rect dd BOSS_INICIO_X, BOSS_INICIO_Y, 0, 0
+    modo_leitura db "rb", 0
+    img_mode db "rb", 0
     img_file db "assets/background/chao.bmp", 0 
     img_file2 db "assets/background/chao960.bmp", 0       ; novo mapa
     cena_atual db 0
 
     snd_golpe_f   db "assets/sounds/sfx/swipe_fix.wav", 0
 
-     percival_theme_f      db "assets/sounds/music/Percival.ogg", 0   ; ajuste nome e pasta
-
-    modo_leitura db "rb", 0
-    img_mode db "rb", 0
+    percival_theme_f      db "assets/sounds/music/Percival.ogg", 0   ; ajuste nome e pasta
 
 section .bss
     tex_w         resd 1   ; largura da imagem (preenchido por SDL_QueryTexture)
@@ -176,6 +192,7 @@ section .bss
     idle_h        resd 1   ; altura do sprite parado
 
     king_idle     resq 1   ; textura do Rei.bmp (sprite parado)
+    king_morte    resq 1   ; textura do Rei-morte.bmp
     king_atk_u    resq 1   ; textura do Rei Atk Up.bmp (ataque para cima)
     king_atk_d    resq 1   ; textura do Rei Atk Dwn.bmp (ataque para baixo)
     king_atk_l    resq 1   ; textura do Rei Atk Esq.bmp (ataque para esquerda)
@@ -200,9 +217,14 @@ section .bss
     movendo       resd 1   ; 0 = parado, 1 = se moveu neste quadro
     walk_delay    equ 8    ; trocar de frame a cada X quadros
 
+    rei_morto     resd 1   ; 1 = derrotado por contato com o boss
+%if DESENVOLVIMENTO
+    dev_imune     resd 1   ; 1 = ignora dano do boss, sem remover a colisao
+%endif
     rei_x         resd 1   ; posisão x hitbox
     rei_y         resd 1   ; posisão y hitbox
 
+    ataque_cooldown resd 1 ; nao zera ao soltar as setas
     atk_dir       resd 1   ; direção do ataque (0= não, 1=esquerda, 2=direita, 3=cima, 4=baixo)
     atacou        resd 1   ; 0 = não atacou, 1 = atacou
     atk_fr        equ 12   ; frames que o ataque dura (1/60s cada)
@@ -280,6 +302,10 @@ main:
     mov  r14, rax                   ; r14 = textura atual (usada no desenho)
     mov  [king_idle], rax          ; cópia guardada
 
+    lea  rdi, [rei_morte_bmp]
+    call CarregarTextura
+    mov  [king_morte], rax
+
     ; andando, frame 0
     lea  rdi, [reiC1_bmp]
     call CarregarTextura
@@ -301,9 +327,6 @@ main:
     inc  r13d
     cmp  r13d, BOSS_TOTAL_FRAMES
     jl   .carrega_boss
-
-    call AtualizarPercivalHitbox    
-    mov dword [percival_vivo], 1
 
     mov rdi, [boss_texturas]
     xor esi, esi
@@ -389,26 +412,10 @@ main:
     mov eax, [tex_h]
     mov [idle_h], eax            ; guarda altura do sprite parado
 
-    mov  eax, [tex_w]
-    mov  r9d, W
-    sub  r9d, eax
-    sar  r9d, 1                  ; (W - largura) / 2
-    mov  [rei_x], r9d           ; x
-
-    mov  eax, [tex_h]
-    mov  r9d, H
-    sub  r9d, eax
-    sar  r9d, 1                  ; (H - altura) / 2
-    mov  [rei_y], r9d           ; y
-
-    mov  eax, [tex_w]
-    mov  [rsp+72], eax           ; largura
-    mov  eax, [tex_h]
-    mov  [rsp+76], eax           ; altura
-
     xor  edi, edi
     chamar SDL_GetKeyboardState    ; devolve ponteiro para um array de bytes
     mov  r13, rax                ; r13 = estado do teclado
+    jmp  .reiniciar
 
 .loop:
 .eventos:
@@ -422,9 +429,50 @@ main:
     jne  .eventos
     cmp  dword [rsp+20], SDLK_ESCAPE    ; era o ESC?
     je   .fim
+%if DESENVOLVIMENTO
+    cmp  byte [rsp+13], 0              ; uma acao por pressionamento, sem repeticao
+    jne  .eventos
+    cmp  dword [rsp+16], SC_R          ; scancode de R, inclusive com Shift
+    je   .reiniciar
+    cmp  dword [rsp+16], SC_I
+    jne  .eventos
+    cmp  dword [rei_morto], 0          ; imunidade nao revive o rei
+    jne  .eventos
+    xor  dword [dev_imune], 1
+    mov  rdi, rbx
+    lea  rsi, [titulo]
+    cmp  dword [dev_imune], 0
+    je   .dev_atualiza_titulo
+    lea  rsi, [titulo_imune]
+.dev_atualiza_titulo:
+    chamar SDL_SetWindowTitle
+%endif
+    jmp  .eventos
+
+.reiniciar:
+    ; Reutiliza janela e sprites; so restaura o fundo se mudou de cenario.
+    cmp  byte [cena_atual], 0
+    je   .reiniciar_estado
+    mov  rdi, r15
+    chamar SDL_DestroyTexture
+    lea  rdi, [img_file]
+    call CarregarTextura
+    mov  r15, rax
+.reiniciar_estado:
+    call ReiniciarPartida
+    mov  r14, [king_idle]
+    mov  rdi, rbx
+    lea  rsi, [titulo]
+    chamar SDL_SetWindowTitle
     jmp  .eventos
 
 .teclado:
+    cmp dword [rei_morto], 0
+    jne .rei_derrotado
+    cmp dword [ataque_cooldown], 0
+    je .cooldown_atualizado
+    dec dword [ataque_cooldown]
+.cooldown_atualizado:
     mov  r8d, [rei_x]              ; x antigo (antes era rsp+64) 
     mov  r9d, [rei_y]              ; y antigo (rsp+68)
     mov  r10d, [atk_dir]           ; direção do ataque
@@ -471,6 +519,8 @@ main:
     ; Se já atacou nesta pressionada, fica no idle
     cmp dword [atacou], 1
     je .ja_atacou
+    cmp dword [ataque_cooldown], 0
+    jne .termina_ataque
 
     ; Escolhe a direção do ataque
     cmp byte [r13 + SC_LEFT], 0
@@ -494,6 +544,7 @@ main:
     mov dword [atk_dir], 4
 
 .marca_ataque:
+    mov dword [ataque_cooldown], PLAYER_ATAQUE_INTERVALO
     mov dword [atacou], 1
     mov dword [ataque_timer], atk_fr
 
@@ -535,26 +586,8 @@ main:
     mov  ecx, W
     sub  ecx, BOXREI_L               ; x máximo trocado [tex_w] -> BOXREI_L
     cmp  eax, ecx
-    jle  .x_max_ok
-    cmp byte [cena_atual], 0        
-    je .trocar_cena2
-    mov  eax, ecx                   ; passou da direita: x = máximo
-    jmp .x_max_ok
-
-    .trocar_cena2:
-        mov byte [cena_atual], 1        ; troca o byte do mapa
-        mov eax, 100                    ; Posiciona o rei na borda do outro lado
-        mov [rei_x], eax                 
-
-        mov rdi, r15                     
-        chamar SDL_DestroyTexture          
-        
-        lea rdi, [img_file2]            
-        call CarregarTextura             
-        mov r15, rax                     
-        
-        jmp .y_limit_start               
-
+    jle  .x_max_ok       
+    mov  eax, ecx                   ; passou da direita: x = máximo          
 .x_max_ok:
     mov  [rei_x], eax
 
@@ -563,7 +596,33 @@ main:
     mov  eax, [rei_y]
     test eax, eax
     jge  .y_min_ok
+    cmp byte [cena_atual], 0  ; vê se tá no mapa 0 
+    je .trocar_cena2            ; troca cena
     xor  eax, eax
+    jmp .y_min_ok
+
+.trocar_cena2:
+    mov byte [cena_atual], 1        
+    mov dword [rei_x], W / 2 - BOXREI_L / 2   
+    mov dword [rei_y], H - BOXREI_A - 40
+
+    mov dword [percival_vivo], 1    ; spawna boss 1
+    mov dword [boss_estado], BOSS_PERSEGUIR
+    mov dword [boss_frame], BOSS_FRAME_ANDANDO
+    mov dword [boss_contador], 0
+    mov dword [boss_rect], BOSS_INICIO_X
+    mov dword [boss_rect + 4], BOSS_INICIO_Y
+    call AtualizarPercivalHitbox
+    
+    mov rdi, r15                     
+    chamar SDL_DestroyTexture          
+    
+    lea rdi, [img_file2]            
+    call CarregarTextura             
+    mov r15, rax                     
+    
+    jmp .sem_colisao_boss
+
 .y_min_ok:
     mov  ecx, H
     sub  ecx, BOXREI_A              
@@ -580,7 +639,7 @@ main:
     mov esi, [percival_hitbox + 4]
     mov edx, [percival_hitbox + 8]
     mov ecx, [percival_hitbox + 12]
-    call TestaColisao
+    call TestaContatoBoss
 
     cmp rax, 1
     je .houve_colisao
@@ -628,14 +687,6 @@ main:
     cmp rax, 1
     je .houve_colisao
 
-    mov edi, ROCK_X
-    mov esi, ROCK_Y
-    mov edx, ROCK_L
-    mov ecx, ROCK_A
-    call TestaColisao
-    cmp rax, 1
-    je .houve_colisao
-
     mov edi, CAMP_X
     mov esi, CAMP_Y
     mov edx, CAMP_L
@@ -662,8 +713,22 @@ main:
     mov  dword [movendo], 1
 
 .animacao:
+    cmp dword [rei_morto], 0
+    jne .derrota_player
     call AtualizarBoss
-
+    cmp dword [rei_morto], 0
+    je .verificar_ataque
+.derrota_player:
+    mov dword [movendo], 0
+    mov dword [atk_dir], 0
+    mov dword [ataque_timer], 0
+    mov qword [swipe_atual], 0
+    mov dword [atk_hitbox + 8], 0
+    mov dword [atk_hitbox + 12], 0
+    mov rdi, rbx
+    lea rsi, [titulo_derrota]
+    chamar SDL_SetWindowTitle
+    jmp .rei_derrotado
 
 .verificar_ataque:
     cmp  dword [atk_dir], 0
@@ -724,6 +789,10 @@ main:
     mov  eax, [frame_atual]         ; eax zera a parte alta de rax
     lea  rcx, [king_walk]
     mov  r14, [rcx + rax*8]         ; r14 = textura do frame atual
+    jmp  .desenha
+
+.rei_derrotado:
+    mov  r14, [king_morte]
 
 .desenha:
     ; Obtém o tamanho do sprite atual
@@ -743,17 +812,18 @@ main:
     xor ecx, ecx
     chamar SDL_RenderCopy
 
-    ; Desenha o boss sobre o cenario, antes do personagem.
-    cmp dword [percival_vivo], 1
-    jne .sem_boss
+    cmp byte [cena_atual], 1        ; n desenha o boss se tiver em mapa 1
+    jne .pula_desenho_boss1
+
+    ; O corpo continua visivel depois da morte, sem hitbox ativa.
     call PrepararDesenhoBoss     ; rdx = recorte/NULL, rcx = destino alinhado
     mov  rdi, r12
     mov  eax, [boss_frame]
     lea  rsi, [boss_texturas]
     mov  rsi, [rsi + rax*8]
     chamar SDL_RenderCopy
-    .sem_boss:
     
+.pula_desenho_boss1:
     ; x = posição do rei + metade da diferença de largura
     mov eax, [rei_x]
     mov ecx, [idle_w]
@@ -1054,15 +1124,6 @@ main:
     lea rsi, [rsp+64]
     chamar SDL_RenderDrawRect
 
-    mov dword [rsp+64], ROCK_X
-    mov dword [rsp+68], ROCK_Y
-    mov dword [rsp+72], ROCK_L
-    mov dword [rsp+76], ROCK_A
-
-    mov rdi, r12
-    lea rsi, [rsp+64]
-    chamar SDL_RenderDrawRect
-
     mov dword [rsp+64], CAMP_X
     mov dword [rsp+68], CAMP_Y
     mov dword [rsp+72], CAMP_L
@@ -1104,6 +1165,8 @@ main:
     chamar SDL_DestroyTexture
     mov  rdi, [king_idle]
     chamar SDL_DestroyTexture
+    mov  rdi, [king_morte]
+    chamar SDL_DestroyTexture
     mov  rdi, [king_walk]
     chamar SDL_DestroyTexture
     mov  rdi, [king_walk + 8]
@@ -1140,6 +1203,39 @@ main:
     pop  rbx
     xor  eax, eax
     ret
+
+; Estado inicial compartilhado pela abertura do jogo e pela tecla R.
+; Preserva as texturas, suas dimensoes e os registradores de main.
+ReiniciarPartida:
+%if DESENVOLVIMENTO
+    mov  dword [dev_imune], 0
+%endif
+    mov  byte [cena_atual], 0
+    mov  dword [rei_morto], 0
+    mov  dword [rei_x], REI_INICIO_X
+    mov  dword [rei_y], REI_INICIO_Y
+    mov  dword [frame_atual], 0
+    mov  dword [cont_anim], 0
+    mov  dword [movendo], 0
+    mov  dword [ataque_cooldown], 0
+    mov  dword [atk_dir], 0
+    mov  dword [atacou], 0
+    mov  dword [ataque_timer], 0
+    mov  qword [swipe_atual], 0
+    mov  qword [atk_hitbox], 0
+    mov  qword [atk_hitbox + 8], 0
+    mov  dword [boss_rect], BOSS_INICIO_X
+    mov  dword [boss_rect + 4], BOSS_INICIO_Y
+    mov  dword [boss_estado], BOSS_PERSEGUIR
+    mov  dword [boss_frame], BOSS_FRAME_ANDANDO
+    mov  dword [boss_contador], 0
+    mov  dword [boss_dash_x], 0
+    mov  dword [boss_dash_y], 0
+    mov  dword [boss_dash_vx], 0
+    mov  dword [boss_dash_vy], 0
+    mov  dword [boss_meio_passo], 0
+    mov  dword [percival_vivo], 0           ; boss 1 incialmente morto, att quando trocar de cena
+    jmp  AtualizarPercivalHitbox
 
 ; Alinha as novas poses pelos pes, mantendo a escala original dos pixels.
 ; Retorna os argumentos srcrect (rdx) e dstrect (rcx) de SDL_RenderCopy.
@@ -1283,14 +1379,14 @@ AtualizarBoss:
     cmp  dword [boss_rect + 4], WALL3_Y - BOSS_HITBOX_Y - BOSS_HITBOX_A
     jg   .interrompe_dash
 
-    ; Preserva a colisao existente com o jogador. Dano sera integrado depois.
+    ; Contato causa dano antes de desfazer o passo que atingiu o jogador.
     mov  edi, [boss_rect]
     add  edi, BOSS_HITBOX_X
     mov  esi, [boss_rect + 4]
     add  esi, BOSS_HITBOX_Y
     mov  edx, BOSS_HITBOX_L
     mov  ecx, BOSS_HITBOX_A
-    call TestaColisao
+    call TestaContatoBoss
     test eax, eax
     jz   .fim
 .interrompe_dash:
@@ -1313,9 +1409,12 @@ AtualizarBoss:
     mov  dword [boss_meio_passo], 0
     jmp  .perseguir
 .morto:
-    ; O sistema de dano devera definir boss_estado = BOSS_MORTO ao derrotar o boss.
     mov  dword [boss_frame], BOSS_FRAME_MORTE
 .fim:
+    cmp dword [percival_vivo], 1
+    jne .retorna
+    call AtualizarPercivalHitbox
+.retorna:
     add  rsp, 8
     ret
 
@@ -1362,7 +1461,7 @@ MovimentarBoss:
     add esi, BOSS_HITBOX_Y
     mov edx, BOSS_HITBOX_L
     mov ecx, BOSS_HITBOX_A
-    call TestaColisao
+    call TestaContatoBoss
     
     cmp rax, 1
     jne .passo_ok
@@ -1387,6 +1486,39 @@ AtualizarPercivalHitbox:
 
     mov dword [percival_hitbox + 8], BOSS_HITBOX_L
     mov dword [percival_hitbox + 12], BOSS_HITBOX_A
+    ret
+
+; Retorna 1 no contato (inclusive bordas) e aplica dano apenas com boss vivo.
+; Recebe a hitbox candidata em edi/esi/edx/ecx, antes de reverter a colisao.
+; Preserva r8/r9, que guardam a posicao anterior do player ou do boss.
+TestaContatoBoss:
+    xor eax, eax
+    cmp dword [percival_vivo], 1
+    jne .fim
+    mov r10d, edi
+    add r10d, edx
+    cmp dword [rei_x], r10d
+    jg .fim
+    mov r10d, [rei_x]
+    add r10d, BOXREI_L
+    cmp r10d, edi
+    jl .fim
+    mov r10d, esi
+    add r10d, ecx
+    cmp dword [rei_y], r10d
+    jg .fim
+    mov r10d, [rei_y]
+    add r10d, BOXREI_A
+    cmp r10d, esi
+    jl .fim
+%if DESENVOLVIMENTO
+    cmp dword [dev_imune], 0
+    jne .contato
+%endif
+    mov dword [rei_morto], 1
+.contato:
+    mov eax, 1
+.fim:
     ret
 
 TestaColisao:
@@ -1419,6 +1551,14 @@ TestaColisao:
     ret
 
 BossAttacked:
+    ; Apenas ataques ativos contra o boss vivo e vulneravel causam dano.
+    cmp dword [percival_vivo], 1
+    jne .boss_fora
+    cmp dword [boss_estado], BOSS_VULNERAVEL
+    jne .boss_fora
+    cmp dword [atk_dir], 0
+    je .boss_fora
+
     mov r8d, [percival_hitbox]
     mov r9d, [percival_hitbox + 4]
 
@@ -1454,6 +1594,9 @@ BossAttacked:
     ret
 
 BossDied:
+    mov dword [boss_estado], BOSS_MORTO
+    mov dword [boss_frame], BOSS_FRAME_MORTE
+    mov dword [boss_contador], 0
     mov dword [percival_vivo], 0
     mov dword [percival_hitbox], 0
     mov dword [percival_hitbox + 4], 0
