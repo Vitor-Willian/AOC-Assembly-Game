@@ -171,10 +171,7 @@ section .data
 
     snd_golpe_f   db "assets/sounds/sfx/swipe_fix.wav", 0
 
-     percival_theme_f      db "assets/sounds/music/Percival.ogg", 0   ; ajuste nome e pasta
-
-    modo_leitura db "rb", 0
-    img_mode db "rb", 0
+    percival_theme_f      db "assets/sounds/music/Percival.ogg", 0   ; ajuste nome e pasta
 
 section .bss
     tex_w         resd 1   ; largura da imagem (preenchido por SDL_QueryTexture)
