@@ -181,6 +181,7 @@ section .data
     img_file2 db "assets/background/chao2.bmp", 0       ; novo mapa
     cena_atual db 0
 
+    ; SFX
     snd_golpe_f   db "assets/sounds/sfx/swipe.wav", 0
     player_dmg_f db "assets/sounds/sfx/player_dmg.wav", 0
 
@@ -188,7 +189,12 @@ section .data
     percival_dash_f db "assets/sounds/sfx/percival_dash.wav", 0
     boss_death_f db "assets/sounds/sfx/boss_death.wav", 0
 
+    ; Background music
+    main_menu_f      db "assets/sounds/music/Main Menu.ogg", 0
+    game_over_f     db "assets/sounds/music/Game Over.ogg", 0
+    bonfire_theme_f      db "assets/sounds/music/Bonfire.ogg", 0
     percival_theme_f      db "assets/sounds/music/Percival.ogg", 0   ; ajuste nome e pasta
+    gawain_theme_f      db "assets/sounds/music/Gawain.ogg", 0
 
 section .bss
     tex_w         resd 1   ; largura da imagem (preenchido por SDL_QueryTexture)

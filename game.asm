@@ -169,6 +169,7 @@ section .data
     img_file2 db "assets/background/chao2.bmp", 0       ; novo mapa
     cena_atual db 0
 
+    ; SFX
     snd_golpe_f   db "assets/sounds/sfx/swipe.wav", 0
     player_dmg_f db "assets/sounds/sfx/player_dmg.wav", 0
 
@@ -176,7 +177,14 @@ section .data
     percival_dash_f db "assets/sounds/sfx/percival_dash.wav", 0
     boss_death_f db "assets/sounds/sfx/boss_death.wav", 0
 
-    percival_theme_f      db "assets/sounds/music/Percival.ogg", 0   ; ajuste nome e pasta
+    ; Background music
+    main_menu_f      db "assets/sounds/music/Main Menu.ogg", 0
+    game_over_f     db "assets/sounds/music/Game Over.ogg", 0
+
+    bonfire_theme_f      db "assets/sounds/music/Bonfire.ogg", 0
+    percival_theme_f      db "assets/sounds/music/Percival.ogg", 0   
+    gawain_theme_f      db "assets/sounds/music/Gawain.ogg", 0
+    
 
 section .bss
     tex_w         resd 1   ; largura da imagem (preenchido por SDL_QueryTexture)
@@ -231,8 +239,16 @@ section .bss
     atk_hitbox     resd 4   ; hitbox do ataque (x, y, w, h)
 
     percival_theme resq 1
+    gawain_theme   resq 1
+    bonfire_theme  resq 1
+    main_menu      resq 1
+    game_over      resq 1
 
-    snd_golpe     resq 1
+    snd_golpe      resq 1
+    snd_dmg        resq 1
+    snd_percival_load resq 1
+    snd_percival_dash resq 1
+    snd_boss_death resq 1
 
 section .text
 ; Pilha em main:
@@ -374,9 +390,9 @@ main:
 .audio_carregado:
 
      ; Música de fundo
-    lea  rdi, [percival_theme_f]
+    lea  rdi, [bonfire_theme_f]
     call Mix_LoadMUS             ; já recebe o caminho direto, sem RWFromFile
-    mov  [percival_theme], rax
+    mov  [bonfire_theme], rax
     test rax, rax
     jz   .sem_musica             ; arquivo não encontrado: segue sem música
 
@@ -1175,7 +1191,7 @@ main:
 
 .sem_golpe:
 
-    mov  rdi, [percival_theme]
+    mov  rdi, [bonfire_theme]
     test rdi, rdi
     jz   .sem_free_musica
     call Mix_FreeMusic
