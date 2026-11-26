@@ -10,7 +10,23 @@
 - **I** (desenvolvimento): ligar/desligar a imunidade ao dano do boss, incluindo
   o dash. A colisao fisica continua ativa. Funciona com o rei vivo e nao revive
   um personagem morto. Segurar a tecla nao alterna repetidamente.
-- **Esc**: sair.
+- **Esc**: abrir o menu de pausa ou retomar a partida.
+
+## Menu de pausa
+
+Use **W/S** ou **setas para cima/baixo** para selecionar e **Enter** para confirmar:
+
+- **Retomar**: continua exatamente de onde parou.
+- **Menu principal — em breve**: reservado para o futuro menu; por enquanto,
+  confirmar essa opcao mantem o jogo pausado.
+- **Sair do jogo**: fecha o jogo.
+
+A pausa funciona nos dois mapas, durante a introducao e depois da morte.
+Movimento, ataques, dano, animacoes e temporizadores ficam congelados; musica
+e efeitos sonoros tambem pausam. Os atalhos **R/I** ficam bloqueados no menu.
+Ao retomar, solte as teclas de navegacao para evitar um ataque involuntario.
+O menu usa apenas o teclado e e compartilhado por Linux e Windows em
+`pause_menu.inc`, com uma fonte simples desenhada pelo SDL, sem dependencias extras.
 
 O jogo comeca no mapa da fogueira. Saia pela abertura no centro do topo para
 entrar na arena do primeiro boss pelo centro inferior. O rei caminha

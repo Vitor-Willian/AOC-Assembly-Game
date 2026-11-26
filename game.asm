@@ -20,6 +20,8 @@ extern SDL_DestroyRenderer, SDL_DestroyWindow, SDL_Quit
 extern SDL_RenderDrawRect   ; só pra testar
 global main
 
+%include "pause_menu.inc"
+
 SDL_INIT_VIDEO     equ 0x20
 WINDOWPOS_CENTERED equ 0x2FFF0000
 SDL_WINDOW_SHOWN   equ 4
@@ -142,10 +144,10 @@ section .data
 %if DESENVOLVIMENTO
     titulo      db "O Retorno do Rei - R: reiniciar | I: imunidade DESLIGADA", 0
     titulo_imune db "O Retorno do Rei - R: reiniciar | I: imunidade LIGADA", 0
-    titulo_derrota db "O Retorno do Rei - Voce morreu! R para reiniciar | ESC para sair", 0
+    titulo_derrota db "O Retorno do Rei - Voce morreu! R para reiniciar | ESC: pausa", 0
 %else
     titulo      db "O Retorno do Rei", 0
-    titulo_derrota db "O Retorno do Rei - Voce morreu! ESC para sair", 0
+    titulo_derrota db "O Retorno do Rei - Voce morreu! ESC: pausa", 0
 %endif
     rei_bmp db "assets/sprites/Rei.bmp", 0
     rei_morte_bmp db "assets/sprites/Rei-morte.bmp", 0
@@ -460,8 +462,7 @@ main:
     je   .fim
     cmp  dword [rsp], SDL_KEYDOWN       ; foi uma tecla pressionada?
     jne  .eventos
-    cmp  dword [rsp+20], SDLK_ESCAPE    ; era o ESC?
-    je   .fim
+    PAUSA_EVENTOS
 %if DESENVOLVIMENTO
     cmp  byte [rsp+13], 0              ; uma acao por pressionamento, sem repeticao
     jne  .eventos
@@ -502,6 +503,7 @@ main:
     jmp  .eventos
 
 .teclado:
+    PAUSA_QUADRO
     cmp dword [intro_ativa], 0
     je .jogando
     call AtualizarEntradaArena
