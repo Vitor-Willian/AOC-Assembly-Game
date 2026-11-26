@@ -12,10 +12,20 @@
   um personagem morto. Segurar a tecla nao alterna repetidamente.
 - **Esc**: sair.
 
-O reinicio restaura o primeiro cenario, as posicoes iniciais, os personagens
-vivos e os temporizadores de movimento e ataque. Tanto ao abrir quanto ao
-reiniciar, o rei aparece no lado esquerdo e o boss no lado direito, na altura
-central do mapa. O rei morto usa
+O jogo comeca no mapa da fogueira. Saia pela abertura no centro do topo para
+entrar na arena do primeiro boss pelo centro inferior. O rei caminha
+automaticamente na diagonal ate o lado esquerdo, usando os frames de
+caminhada. Ao chegar, o boss emerge no lado direito com as sprites de ataque
+4, 5 e 6. Depois da animacao e da pausa, os controles e o combate sao liberados.
+A base do trofeu central bloqueia a passagem do jogador no segundo mapa.
+Sua hitbox usa as constantes `TROFEU_*` nos dois arquivos Assembly.
+Durante toda a introducao, nao ha ataques nem dano; **R** e **Esc** continuam ativos.
+
+O reinicio com **R** volta para a fogueira e restaura os personagens e os
+temporizadores. A passagem para a arena preserva a imunidade de desenvolvimento.
+A caminhada usa `VEL`; o tempo de cada sprite de entrada do boss usa
+`INTRO_BOSS_POR_FRAME`, e a pausa final usa `INTRO_PAUSA_QUADROS` em ambos os
+arquivos Assembly. O rei morto usa
 `assets/sprites/Rei-morte.bmp`; o boss derrotado permanece no chao com
 `boss1morte.bmp`, sem movimento, dano ou colisao.
 
