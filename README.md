@@ -12,10 +12,10 @@
   um personagem morto. Segurar a tecla nao alterna repetidamente.
 - **Esc**: sair.
 
-O reinicio restaura o primeiro cenario, as posicoes iniciais, os personagens
-vivos e os temporizadores de movimento e ataque. Tanto ao abrir quanto ao
-reiniciar, o rei aparece no lado esquerdo e o boss no lado direito, na altura
-central do mapa. O rei morto usa
+O reinicio restaura a arena do boss, as posicoes iniciais, os personagens
+vivos e os temporizadores de movimento e ataque, repetindo a introducao.
+O rei entra no lado esquerdo e o boss no lado direito, na altura central do
+mapa. O rei morto usa
 `assets/sprites/Rei-morte.bmp`; o boss derrotado permanece no chao com
 `boss1morte.bmp`, sem movimento, dano ou colisao.
 
@@ -29,6 +29,29 @@ desses atalhos no titulo da janela. A inicializacao normal do jogo permanece.
 A imunidade comeca desligada e volta a ficar desligada ao reiniciar com **R**.
 O titulo da janela indica o estado atual. Para reativar os recursos de teste,
 volte a configuracao para `1` e recompile.
+
+## Introducao da arena
+
+Enquanto nao ha menu, o jogo abre diretamente na arena (`chao960.bmp`). O rei
+cai de fora da tela, pelo lado esquerdo, acelerando ate pousar. Ao mesmo tempo,
+o boss emerge do solo a direita usando `boss1ataque4.bmp`, `boss1ataque5.bmp`
+e `boss1ataque6.bmp`, nessa ordem. A parte ainda enterrada fica escondida por
+um recorte; a sprite sobe sem mudar de escala.
+
+Movimento, ataques e dano ficam suspensos durante a entrada. Depois que ambos
+chegam, ha uma breve pausa antes de liberar o combate; a espera pelo primeiro
+ataque do boss so comeca depois da introducao. **Esc** continua funcionando,
+e **R**, no modo de desenvolvimento, recomeca a sequencia a qualquer momento.
+
+Os ajustes ficam nas constantes `INTRO_*` em `game.asm`: queda de 42 quadros,
+24 quadros por pose do boss (72 no total) e pausa final de 24 quadros. A sequencia
+dura aproximadamente 1,5 s, variando com a taxa de quadros. `INTRO_BOSS_BASE_Y`
+marca a linha logo abaixo dos pes nas tres imagens (108 pixels).
+
+`ReiniciarPartida` prepara o estado completo e inicia a introducao;
+`AtualizarEntradaArena` avanca a animacao no loop normal. O futuro botao Jogar
+pode usar o mesmo fluxo de inicio de partida. O mapa inicial permanece nos
+arquivos, mas nao e exibido ao abrir o jogo.
 
 ## Primeiro boss: ciclo de ataque
 
@@ -70,6 +93,17 @@ Evite passos maiores que a hitbox do jogador sem adicionar colisao por varredura
 pois um salto muito grande entre quadros pode atravessar o jogador.
 
 ## Compilar e executar
+
+No Ubuntu/WSL, instale as dependencias antes de compilar:
+
+```bash
+sudo apt update
+sudo apt install build-essential nasm libsdl2-dev libsdl2-mixer-dev
+```
+
+O pacote `libsdl2-mixer-dev` e necessario para os sons e a musica. Se aparecer
+`cannot find -lSDL2_mixer`, instale esse pacote no mesmo Ubuntu/WSL em que
+executa o `make`, depois rode `make run` novamente.
 
 Com o Makefile:
 
