@@ -93,10 +93,14 @@ INTRO_BOSS_FRAME_INICIAL equ BOSS_FRAME_CARGA + 3
 INTRO_BOSS_POR_FRAME equ 25
 INTRO_BOSS_QUADROS equ INTRO_BOSS_POR_FRAME * 3
 INTRO_BOSS_BASE_Y equ 108        ; primeiro pixel abaixo dos pes nesses frames
+<<<<<<< HEAD
 INTRO_CAMINHADA equ 1
 INTRO_BOSS equ 2
 ARENA_ENTRADA_X equ (WALL2_L + WALL5_X - BOXREI_L) / 2
 ARENA_ENTRADA_Y equ H
+=======
+INTRO_REI_QUEDA_QUADROS equ 42
+>>>>>>> 81604a4cea2256242c128e83676780349cb5c29d
 INTRO_PAUSA_QUADROS equ 24
 INTRO_TOTAL_QUADROS equ INTRO_BOSS_QUADROS + INTRO_PAUSA_QUADROS
 
@@ -185,7 +189,11 @@ section .data
     img_mode db "rb", 0
     img_file db "assets/background/chao.bmp", 0 
     img_file2 db "assets/background/chao2.bmp", 0       ; novo mapa
+<<<<<<< HEAD
     cena_atual db 0             ; comeca no mapa da fogueira
+=======
+    cena_atual db 1             ; inicia na arena, junto com img_file2
+>>>>>>> 81604a4cea2256242c128e83676780349cb5c29d
 
     ; SFX
     snd_golpe_f      db "assets/sounds/sfx/swipe.wav", 0
@@ -213,6 +221,10 @@ section .data
 section .bss
     intro_ativa    resd 1
     intro_contador resd 1
+<<<<<<< HEAD
+=======
+    intro_rei_offset_y resd 1   ; deslocamento visual; hitbox fica no destino
+>>>>>>> 81604a4cea2256242c128e83676780349cb5c29d
     intro_boss_offset_y resd 1  ; parte da sprite ainda abaixo do solo
     intro_boss_src resd 4       ; recorte da parte acima do solo, sem esticar
 
@@ -326,7 +338,11 @@ main:
 
     ; ---- chão ----
 
+<<<<<<< HEAD
     lea  rdi, [img_file]         ; primeiro mapa: fogueira
+=======
+    lea  rdi, [img_file2]        ; sem menu: abre diretamente na arena do boss
+>>>>>>> 81604a4cea2256242c128e83676780349cb5c29d
     call CarregarTextura
     mov  r15, rax                   ; r15 = textura do chão
 
@@ -484,11 +500,11 @@ main:
 
 .reiniciar:
     ; Reutiliza janela e sprites; so restaura o fundo se mudou de cenario.
-    cmp  byte [cena_atual], 0
+    cmp  byte [cena_atual], 1
     je   .reiniciar_estado
     mov  rdi, r15
     call SDL_DestroyTexture
-    lea  rdi, [img_file]
+    lea  rdi, [img_file2]
     call CarregarTextura
     mov  r15, rax
 .reiniciar_estado:
@@ -505,7 +521,12 @@ main:
     cmp dword [intro_ativa], 0
     je .jogando
     call AtualizarEntradaArena
+<<<<<<< HEAD
     jmp .verificar_movimento    ; anima a caminhada, sem teclado, ataques ou IA
+=======
+    mov r14, [king_idle]
+    jmp .desenha                 ; sem movimento, ataque, colisao ou IA na entrada
+>>>>>>> 81604a4cea2256242c128e83676780349cb5c29d
 .jogando:
     cmp dword [rei_morto], 0
     jne .rei_derrotado
@@ -642,7 +663,11 @@ main:
     jmp .y_min_ok
 
 .trocar_cena2:
+<<<<<<< HEAD
     call IniciarEntradaArena       ; entrada inferior, seguida da caminhada automatica
+=======
+    call ReiniciarPartida          ; mesma entrada caso o mapa inicial seja usado
+>>>>>>> 81604a4cea2256242c128e83676780349cb5c29d
     
     mov  rdi, [percival_theme]     ; <-- NOVO
     call TrocarMusica              ; <-- NOVO
@@ -885,6 +910,7 @@ main:
     sub ecx, [tex_h]
     sar ecx, 1
     add eax, ecx
+    add eax, [intro_rei_offset_y]   ; queda visual, sem mover a hitbox pelo cenario
     mov [rsp+68], eax
 
     ; desenha usando o tamanho real do sprite atual
@@ -1284,7 +1310,11 @@ ReiniciarPartida:
 %if DESENVOLVIMENTO
     mov  dword [dev_imune], 0
 %endif
+<<<<<<< HEAD
     mov  byte [cena_atual], 0     ; abertura e R voltam para a fogueira
+=======
+    mov  byte [cena_atual], 1     ; arena do boss; futuro botao Jogar usa esta rotina
+>>>>>>> 81604a4cea2256242c128e83676780349cb5c29d
     mov  dword [rei_morto], 0
     mov  dword [rei_x], REI_INICIO_X
     mov  dword [rei_y], REI_INICIO_Y
@@ -1308,6 +1338,7 @@ ReiniciarPartida:
     mov  dword [boss_dash_vx], 0
     mov  dword [boss_dash_vy], 0
     mov  dword [boss_meio_passo], 0
+<<<<<<< HEAD
     mov  dword [percival_vivo], 0 ; boss ausente na fogueira e durante a entrada
     mov  qword [percival_hitbox], 0
     mov  qword [percival_hitbox + 8], 0
@@ -1400,7 +1431,70 @@ AtualizarEntradaArena:
     mov  dword [boss_frame], BOSS_FRAME_ANDANDO
     mov  dword [boss_estado], BOSS_PERSEGUIR
     mov  dword [boss_contador], 0
+=======
+    mov  dword [percival_vivo], 1
+    ; Todo reinicio repete a introducao, inclusive com R durante a animacao.
+    mov  dword [intro_ativa], 1
+    mov  dword [intro_contador], 0
+    mov  eax, REI_INICIO_Y
+    add  eax, [idle_h]
+    neg  eax
+    mov  [intro_rei_offset_y], eax
+    mov  dword [intro_boss_offset_y], INTRO_BOSS_BASE_Y
+    mov  dword [boss_frame], INTRO_BOSS_FRAME_INICIAL
+>>>>>>> 81604a4cea2256242c128e83676780349cb5c29d
     jmp  AtualizarPercivalHitbox
+.fim:
+    ret
+
+; Animacao em quadros, usando o loop normal para manter eventos e ESC responsivos.
+; Nao altera posicoes/hitboxes nem consome a espera do primeiro ataque do boss.
+AtualizarEntradaArena:
+    inc  dword [intro_contador]
+    mov  ecx, [intro_contador]
+
+    ; Queda acelerada: deslocamento proporcional a t^2, limitado ao ponto de pouso.
+    mov  dword [intro_rei_offset_y], 0
+    cmp  ecx, INTRO_REI_QUEDA_QUADROS
+    jae  .boss
+    mov  eax, REI_INICIO_Y
+    add  eax, [idle_h]
+    mov  r8d, eax                ; distancia do topo da tela ate o pouso
+    imul eax, ecx
+    imul eax, ecx
+    xor  edx, edx
+    mov  r9d, INTRO_REI_QUEDA_QUADROS * INTRO_REI_QUEDA_QUADROS
+    div  r9d
+    sub  eax, r8d
+    mov  [intro_rei_offset_y], eax
+.boss:
+    mov  dword [intro_boss_offset_y], 0
+    mov  dword [boss_frame], INTRO_BOSS_FRAME_INICIAL + 2
+    cmp  ecx, INTRO_BOSS_QUADROS
+    jae  .pausa
+    ; Sobe mantendo o ponto de saida do solo fixo.
+    mov  eax, INTRO_BOSS_BASE_Y
+    imul eax, ecx
+    xor  edx, edx
+    mov  r9d, INTRO_BOSS_QUADROS
+    div  r9d
+    mov  edx, INTRO_BOSS_BASE_Y
+    sub  edx, eax
+    mov  [intro_boss_offset_y], edx
+    mov  eax, ecx
+    dec  eax                    ; cada uma das tres poses dura 24 quadros
+    xor  edx, edx
+    mov  r9d, INTRO_BOSS_POR_FRAME
+    div  r9d
+    add  eax, INTRO_BOSS_FRAME_INICIAL
+    mov  [boss_frame], eax
+.pausa:
+    cmp  ecx, INTRO_TOTAL_QUADROS
+    jb   .fim
+    mov  dword [intro_ativa], 0
+    mov  dword [boss_frame], BOSS_FRAME_ANDANDO
+    mov  dword [boss_estado], BOSS_PERSEGUIR
+    mov  dword [boss_contador], 0
 .fim:
     ret
 
