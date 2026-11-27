@@ -10,12 +10,38 @@
 - **I** (desenvolvimento): ligar/desligar a imunidade ao dano do boss, incluindo
   o dash. A colisao fisica continua ativa. Funciona com o rei vivo e nao revive
   um personagem morto. Segurar a tecla nao alterna repetidamente.
-- **Esc**: sair.
+- **Esc**: abrir o menu de pausa ou retomar a partida.
 
-O reinicio restaura a arena do boss, as posicoes iniciais, os personagens
-vivos e os temporizadores de movimento e ataque, repetindo a introducao.
-O rei entra no lado esquerdo e o boss no lado direito, na altura central do
-mapa. O rei morto usa
+## Menu de pausa
+
+Use **W/S** ou **setas para cima/baixo** para selecionar e **Enter** para confirmar:
+
+- **Retomar**: continua exatamente de onde parou.
+- **Menu principal — em breve**: reservado para o futuro menu; por enquanto,
+  confirmar essa opcao mantem o jogo pausado.
+- **Sair do jogo**: fecha o jogo.
+
+A pausa funciona nos dois mapas, durante a introducao e depois da morte.
+Movimento, ataques, dano, animacoes e temporizadores ficam congelados; musica
+e efeitos sonoros tambem pausam. Os atalhos **R/I** ficam bloqueados no menu.
+Ao retomar, solte as teclas de navegacao para evitar um ataque involuntario.
+O menu usa apenas o teclado e e compartilhado por Linux e Windows em
+`pause_menu.inc`, com uma fonte simples desenhada pelo SDL, sem dependencias extras.
+
+O jogo comeca no mapa da fogueira. Saia pela abertura no centro do topo para
+entrar na arena do primeiro boss pelo centro inferior. O rei caminha
+automaticamente na diagonal ate o lado esquerdo, usando os frames de
+caminhada. Ao chegar, o boss emerge no lado direito com as sprites de ataque
+4, 5 e 6. Depois da animacao e da pausa, os controles e o combate sao liberados.
+A base do trofeu central bloqueia a passagem do jogador no segundo mapa.
+Sua hitbox usa as constantes `TROFEU_*` nos dois arquivos Assembly.
+Durante toda a introducao, nao ha ataques nem dano; **R** e **Esc** continuam ativos.
+
+O reinicio com **R** volta para a fogueira e restaura os personagens e os
+temporizadores. A passagem para a arena preserva a imunidade de desenvolvimento.
+A caminhada usa `VEL`; o tempo de cada sprite de entrada do boss usa
+`INTRO_BOSS_POR_FRAME`, e a pausa final usa `INTRO_PAUSA_QUADROS` em ambos os
+arquivos Assembly. O rei morto usa
 `assets/sprites/Rei-morte.bmp`; o boss derrotado permanece no chao com
 `boss1morte.bmp`, sem movimento, dano ou colisao.
 
@@ -32,26 +58,26 @@ volte a configuracao para `1` e recompile.
 
 ## Introducao da arena
 
-Enquanto nao ha menu, o jogo abre diretamente na arena (`chao960.bmp`). O rei
-cai de fora da tela, pelo lado esquerdo, acelerando ate pousar. Ao mesmo tempo,
-o boss emerge do solo a direita usando `boss1ataque4.bmp`, `boss1ataque5.bmp`
-e `boss1ataque6.bmp`, nessa ordem. A parte ainda enterrada fica escondida por
-um recorte; a sprite sobe sem mudar de escala.
+O jogo abre no mapa da fogueira (`chao.bmp`). Ao sair pelo topo, o rei entra
+pela parte inferior da arena (`chao2.bmp`) e caminha automaticamente na diagonal
+ate o lado esquerdo. Depois, o boss emerge do solo a direita usando
+`boss1ataque4.bmp`, `boss1ataque5.bmp` e `boss1ataque6.bmp`, nessa ordem.
+A parte ainda enterrada fica escondida por um recorte; a sprite sobe sem
+mudar de escala.
 
-Movimento, ataques e dano ficam suspensos durante a entrada. Depois que ambos
-chegam, ha uma breve pausa antes de liberar o combate; a espera pelo primeiro
-ataque do boss so comeca depois da introducao. **Esc** continua funcionando,
-e **R**, no modo de desenvolvimento, recomeca a sequencia a qualquer momento.
+O controle manual, os ataques e o dano ficam suspensos durante a entrada.
+Depois da animacao do boss, ha uma breve pausa antes de liberar o combate;
+a espera pelo primeiro ataque so comeca depois da introducao. **Esc** continua
+funcionando, e **R**, no modo de desenvolvimento, volta para a fogueira.
 
-Os ajustes ficam nas constantes `INTRO_*` em `game.asm`: queda de 42 quadros,
-24 quadros por pose do boss (72 no total) e pausa final de 24 quadros. A sequencia
-dura aproximadamente 1,5 s, variando com a taxa de quadros. `INTRO_BOSS_BASE_Y`
+Os ajustes ficam em `game.asm` e `game_win.asm`: `VEL` controla a caminhada,
+`INTRO_BOSS_POR_FRAME` define 25 quadros por pose do boss (75 no total) e
+`INTRO_PAUSA_QUADROS` define a pausa final de 24 quadros. `INTRO_BOSS_BASE_Y`
 marca a linha logo abaixo dos pes nas tres imagens (108 pixels).
 
-`ReiniciarPartida` prepara o estado completo e inicia a introducao;
-`AtualizarEntradaArena` avanca a animacao no loop normal. O futuro botao Jogar
-pode usar o mesmo fluxo de inicio de partida. O mapa inicial permanece nos
-arquivos, mas nao e exibido ao abrir o jogo.
+`ReiniciarPartida` prepara o estado completo na fogueira; `IniciarEntradaArena`
+inicia a introducao na passagem entre mapas, e `AtualizarEntradaArena` avanca
+a animacao no loop normal. A musica acompanha a troca de mapa e o reinicio.
 
 ## Primeiro boss: ciclo de ataque
 
