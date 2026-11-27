@@ -182,7 +182,7 @@ DesenharMenuPausa:
     PAUSA_COR 242, 239, 230
     PAUSA_TEXTO pausa_retomar, 337, 165
     PAUSA_TEXTO pausa_sair, 292, 309
-    PAUSA_COR 154, 158, 166
+    PAUSA_COR 242, 239, 230
     PAUSA_TEXTO pausa_principal, 274, 240
     PAUSA_TEXTO pausa_ajuda, 148, 378
     PAUSA_TEXTO pausa_esc, 310, 411
