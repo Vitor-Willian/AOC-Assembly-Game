@@ -48,7 +48,7 @@ extern Mix_Pause, Mix_Resume, Mix_PauseMusic, Mix_ResumeMusic
     je .pausa_retomar
     cmp dword [pausa_opcao], 2
     je .fim
-    jmp .eventos                ; menu principal: reservado, ainda indisponivel
+    jmp .menu_inicial                ; menu principal: reservado, ainda indisponivel
 .pausa_alternar:
     cmp dword [pausa_ativa], 0
     jne .pausa_retomar
@@ -183,8 +183,7 @@ DesenharMenuPausa:
     PAUSA_TEXTO pausa_retomar, 337, 165
     PAUSA_TEXTO pausa_sair, 292, 309
     PAUSA_COR 154, 158, 166
-    PAUSA_TEXTO pausa_principal, 274, 225
-    PAUSA_TEXTO pausa_em_breve, 328, 256
+    PAUSA_TEXTO pausa_principal, 274, 240
     PAUSA_TEXTO pausa_ajuda, 148, 378
     PAUSA_TEXTO pausa_esc, 310, 411
     add rsp, 8
