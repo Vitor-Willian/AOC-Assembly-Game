@@ -185,8 +185,9 @@ section .data
     boss_rect dd BOSS_INICIO_X, BOSS_INICIO_Y, 0, 0
     modo_leitura db "rb", 0
     img_mode db "rb", 0
-    img_file db "assets/background/chao.bmp", 0 
-    img_file2 db "assets/background/chao2.bmp", 0       ; novo mapa
+    img_file db "assets/background/chao.bmp", 0         ; mapa entrada
+    img_file2 db "assets/background/chao2.bmp", 0       ; mapa percival 
+    img_file3 db "assets/background/chao3.bmp", 0     ; mapa 3
     cena_atual db 0             ; comeca no mapa da fogueira
 
     ; SFX
@@ -640,6 +641,11 @@ main:
     jge  .y_min_ok
     cmp byte [cena_atual], 0  ; vê se tá no mapa 0 
     je .trocar_cena2            ; troca cena
+    cmp byte [cena_atual], 1  ; vê se tá no mapa 1  
+    jne .bloqueia_topo        ; bloqueia a prox entrada até q o boss morra
+    cmp dword [percival_vivo], 0 ; se boss 1 morto
+    je  .trocar_cena3
+.bloqueia_topo:
     xor  eax, eax
     jmp .y_min_ok
 
@@ -657,6 +663,19 @@ main:
     mov r15, rax                     
     
     jmp .teclado
+
+.trocar_cena3:
+    mov  byte [cena_atual], 2               ; provavelmente vai ser trocado essa parte pra fazer animação de entrada 
+    mov  dword [rei_x], ARENA_ENTRADA_X
+    mov  dword [rei_y], H - BOXREI_A - 35   
+    mov  dword [percival_vivo], 0
+
+    mov  rdi, r15                     
+    call SDL_DestroyTexture          
+    lea  rdi, [img_file3]            
+    call CarregarTextura             
+    mov  r15, rax                     
+    jmp  .teclado
 
 .y_min_ok:
     mov  ecx, H
@@ -723,7 +742,11 @@ main:
     je .houve_colisao
 
     cmp byte [cena_atual], 0
-    jne .colisao_trofeu
+    je  .colisao_camp
+    cmp byte [cena_atual], 1        ; mapa 3 n vai ter nenhum obstáculo puramente por preguiça 
+    je  .colisao_trofeu
+    jmp .sem_colisao
+.colisao_camp:
     mov edi, CAMP_X
     mov esi, CAMP_Y
     mov edx, CAMP_L
@@ -1178,7 +1201,12 @@ main:
     call SDL_RenderDrawRect
 
     cmp byte [cena_atual], 0
-    jne .hitbox_trofeu
+    je  .hitbox_camp
+    cmp byte [cena_atual], 1
+    je  .hitbox_trofeu
+    jmp .apresenta_quadro
+
+.hitbox_camp:
     mov dword [rsp+64], CAMP_X
     mov dword [rsp+68], CAMP_Y
     mov dword [rsp+72], CAMP_L
