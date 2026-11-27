@@ -187,7 +187,7 @@ section .data
     img_mode db "rb", 0
     img_file db "assets/background/chao.bmp", 0         ; mapa entrada
     img_file2 db "assets/background/chao2.bmp", 0       ; mapa percival 
-    img_file3 db "assets/background/chao960.bmp", 0     ; mapa 3
+    img_file3 db "assets/background/chao3.bmp", 0     ; mapa 3
     cena_atual db 0             ; comeca no mapa da fogueira
 
     ; SFX
