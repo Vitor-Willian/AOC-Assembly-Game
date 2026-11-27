@@ -57,6 +57,9 @@ BOXREI_L equ 20     ; largura da hitbox
 REI_INICIO_X equ W / 5 - BOXREI_L / 2
 REI_INICIO_Y equ (H - BOXREI_A) / 2
 
+REI_FOGUEIRA_X equ CAMP_X - BOXREI_L - 8
+REI_FOGUEIRA_Y equ CAMP_Y - BOXREI_A + 10
+
 BOSS_HITBOX_L equ 30  
 BOSS_HITBOX_A equ 50
 
@@ -142,12 +145,12 @@ SWIPE_DIST equ 2
 
 section .data
 %if DESENVOLVIMENTO
-    titulo      db "O Retorno do Rei - R: reiniciar | I: imunidade DESLIGADA", 0
-    titulo_imune db "O Retorno do Rei - R: reiniciar | I: imunidade LIGADA", 0
-    titulo_derrota db "O Retorno do Rei - Voce morreu! R para reiniciar | ESC: pausa", 0
+    titulo      db "Cappa Souls - R: reiniciar | I: imunidade DESLIGADA", 0
+    titulo_imune db "Cappa Souls - R: reiniciar | I: imunidade LIGADA", 0
+    titulo_derrota db "Cappa Souls - Voce morreu! R para reiniciar | ESC: pausa", 0
 %else
-    titulo      db "O Retorno do Rei", 0
-    titulo_derrota db "O Retorno do Rei - Voce morreu! ESC: pausa", 0
+    titulo      db "Cappa Souls", 0
+    titulo_derrota db "Cappa Souls - Voce morreu! ESC: pausa", 0
 %endif
     rei_bmp db "assets/sprites/Rei.bmp", 0
     rei_morte_bmp db "assets/sprites/Rei-morte.bmp", 0
@@ -1288,8 +1291,8 @@ ReiniciarPartida:
 %endif
     mov  byte [cena_atual], 0     ; abertura e R voltam para a fogueira
     mov  dword [rei_morto], 0
-    mov  dword [rei_x], REI_INICIO_X
-    mov  dword [rei_y], REI_INICIO_Y
+    mov  dword [rei_x], REI_FOGUEIRA_X
+    mov  dword [rei_y], REI_FOGUEIRA_Y
     mov  dword [frame_atual], 0
     mov  dword [cont_anim], 0
     mov  dword [movendo], 0
