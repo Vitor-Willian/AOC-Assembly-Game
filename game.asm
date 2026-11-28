@@ -146,6 +146,8 @@ TROFEU_A equ 35
 
 SWIPE_DIST equ 2
 MORTE_MUSICA_QUADROS equ 30     ; ~0,5 s (cada quadro: SDL_Delay de 16 ms + desenho)
+MORTE_ESCALA_PCT equ 60                       ; largura da tela de morte em % da tela
+MORTE_LARGURA    equ W * MORTE_ESCALA_PCT / 100   ; = 480 px com 60%
 
 section .data
 %if DESENVOLVIMENTO
@@ -1348,15 +1350,43 @@ main:
     call SDL_RenderDrawRect
 
 .apresenta_quadro:
-    ; Tela de morte por cima de tudo (inclusive as hitboxes de depuracao).
+     ; Tela de morte por cima de tudo, reduzida e centralizada.
     cmp  dword [pausa_ativa], 0
     jne  .sem_tela_morte
     cmp  dword [rei_morto], 0
     je   .sem_tela_morte
+
+    ; Tamanho original da imagem (so para calcular a proporcao)
+    mov  rdi, [death_screen]
+    xor  esi, esi
+    xor  edx, edx
+    lea  rcx, [tex_w]
+    lea  r8, [tex_h]
+    call SDL_QueryTexture
+
+    ; largura fixa; altura = tex_h * largura / tex_w (mantem a proporcao)
+    mov  dword [rsp+72], MORTE_LARGURA
+    mov  eax, [tex_h]
+    imul eax, MORTE_LARGURA
+    xor  edx, edx
+    div  dword [tex_w]
+    mov  [rsp+76], eax             ; h proporcional
+
+    ; centraliza na area logica 800x450
+    mov  ecx, H
+    sub  ecx, eax
+    sar  ecx, 1
+    mov  [rsp+68], ecx             ; y = (H - h) / 2
+
+    mov  eax, W
+    sub  eax, MORTE_LARGURA
+    sar  eax, 1
+    mov  [rsp+64], eax             ; x = (W - w) / 2
+
     mov  rdi, r12
     mov  rsi, [death_screen]
     xor  edx, edx                  ; srcrect = NULL: imagem inteira
-    xor  ecx, ecx                  ; dstrect = NULL: cobre toda a area logica 800x450
+    lea  rcx, [rsp+64]             ; dstrect
     call SDL_RenderCopy
 .sem_tela_morte:
 
