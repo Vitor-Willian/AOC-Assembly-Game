@@ -145,6 +145,7 @@ TROFEU_L equ 54
 TROFEU_A equ 35
 
 SWIPE_DIST equ 2
+MORTE_MUSICA_QUADROS equ 30     ; ~0,5 s (cada quadro: SDL_Delay de 16 ms + desenho)
 
 section .data
 %if DESENVOLVIMENTO
@@ -157,6 +158,7 @@ section .data
 %endif
     main_title_f db "assets/background/Main title.bmp", 0
     start_msg_f db "assets/background/Start Msg.bmp", 0
+    death_screen_f db "assets/background/Death screen.bmp", 0
 
     rei_bmp db "assets/sprites/Rei.bmp", 0
     rei_morte_bmp db "assets/sprites/Rei-morte.bmp", 0
@@ -294,6 +296,9 @@ section .bss
     snd_percival_dash resq 1
     snd_boss_death resq 1
 
+    death_screen   resq 1
+    morte_contador resd 1   ; quadros desde a morte (para atrasar o Game Over)
+
 section .text
 ; Pilha em main:
 ; [rsp+0  .. rsp+63] SDL_Event
@@ -349,6 +354,9 @@ main:
     call CarregarTextura
     mov [start_msg], rax
 
+    lea  rdi, [death_screen_f]
+    call CarregarTextura
+    mov  [death_screen], rax
     ; ---- chão ----
 
     lea  rdi, [img_file]         ; primeiro mapa: fogueira
@@ -451,7 +459,11 @@ main:
     call Mix_LoadMUS
     mov  [percival_theme], rax
 
-    mov  edi, 40                 ; volume global da música (0 a 128)
+    lea  rdi, [game_over_f]
+    call Mix_LoadMUS
+    mov  [game_over], rax
+
+    mov  edi, 60                 ; volume global da música (0 a 128)
     call Mix_VolumeMusic
 
     ; pega o tamanho real da imagem, para não distorcer o sprite
@@ -821,6 +833,10 @@ main:
     cmp dword [rei_morto], 0
     je .verificar_ataque
 .derrota_player:
+    mov  dword [morte_contador], 0   ; <-- começa a contar o atraso
+    xor  edi, edi                    ; <-- corta a música da luta
+    call TrocarMusica
+
     mov dword [movendo], 0
     mov dword [atk_dir], 0
     mov dword [ataque_timer], 0
@@ -895,6 +911,18 @@ main:
 
 .rei_derrotado:
     mov  r14, [king_morte]
+
+    ; Conta ate MORTE_MUSICA_QUADROS e toca o Game Over uma unica vez.
+    mov  eax, [morte_contador]
+    cmp  eax, MORTE_MUSICA_QUADROS
+    jae  .desenha                  ; ja passou (ou ja tocou): nao repete
+    inc  eax
+    mov  [morte_contador], eax
+    cmp  eax, MORTE_MUSICA_QUADROS
+    jne  .desenha
+    mov  rdi, [game_over]
+    mov  esi, 1                    ; 1 = toca uma vez e para
+    call TrocarMusicaSemLoop
 
 .desenha:
     ; Obtém o tamanho do sprite atual
@@ -1320,6 +1348,18 @@ main:
     call SDL_RenderDrawRect
 
 .apresenta_quadro:
+    ; Tela de morte por cima de tudo (inclusive as hitboxes de depuracao).
+    cmp  dword [pausa_ativa], 0
+    jne  .sem_tela_morte
+    cmp  dword [rei_morto], 0
+    je   .sem_tela_morte
+    mov  rdi, r12
+    mov  rsi, [death_screen]
+    xor  edx, edx                  ; srcrect = NULL: imagem inteira
+    xor  ecx, ecx                  ; dstrect = NULL: cobre toda a area logica 800x450
+    call SDL_RenderCopy
+.sem_tela_morte:
+
     ;Restaura a cor do pincel para Preto, senão a tela piscará vermelho no próximo frame
     mov rdi, r12
     xor esi, esi
@@ -1348,6 +1388,11 @@ main:
     mov  rdi, [start_msg]
     call SDL_DestroyTexture
 .sem_start_msg:
+    cmp qword [death_screen], 0
+    je  .sem_death_screen
+    mov rdi, [death_screen]
+    call SDL_DestroyTexture
+.sem_death_screen:
     cmp qword [boss_texturas], 0
     je .boss_ja_removido
     xor  r13d, r13d
@@ -1405,6 +1450,12 @@ main:
 
 .sem_free_percival:
 
+    mov  rdi, [game_over]
+    test rdi, rdi
+    jz   .sem_free_game_over
+    call Mix_FreeMusic
+
+.sem_free_game_over:
 
     call SDL_Quit
 
@@ -1981,7 +2032,13 @@ CarregarTextura:
 
 ; rdi = Mix_Music* a tocar em loop; rdi = 0 para parar a musica (silencio).
 ; Preserva r8-r11. Destroi rax, rcx, rdx, rsi, rdi.
+; rdi = Mix_Music* (0 = silencio).
+; TrocarMusica  : toca em loop infinito.
+; TrocarMusicaSemLoop : esi = repeticoes (1 = toca uma vez e para).
+; Preserva r8-r11. Destroi rax, rcx, rdx, rsi, rdi.
 TrocarMusica:
+    mov  esi, -1                  ; loop infinito
+TrocarMusicaSemLoop:
     push rbp
     mov  rbp, rsp
     push r8
@@ -1992,8 +2049,7 @@ TrocarMusica:
 
     test rdi, rdi
     jz   .silencio
-    mov  esi, -1                  ; -1 = loop infinito
-    call Mix_PlayMusic            ; troca a faixa atual, se houver
+    call Mix_PlayMusic            ; esi = repeticoes
     jmp  .fim
 .silencio:
     call Mix_HaltMusic
