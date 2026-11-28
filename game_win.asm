@@ -48,6 +48,9 @@ SDLK_ESCAPE                   equ 27
 W equ 800
 H equ 450
 
+MAIN_TITLE_W equ 480
+START_MSG_W  equ 280
+
 VEL    equ 3        ; velocidade em pixels por quadro
 SC_W   equ 26       ; scancodes (posição física da tecla)
 SC_A   equ 4
@@ -68,6 +71,9 @@ BOXREI_L equ 20     ; largura da hitbox
 ; Rei no lado esquerdo, centralizado verticalmente pela hitbox.
 REI_INICIO_X equ W / 5 - BOXREI_L / 2
 REI_INICIO_Y equ (H - BOXREI_A) / 2
+
+REI_FOGUEIRA_X equ CAMP_X - BOXREI_L - 8
+REI_FOGUEIRA_Y equ CAMP_Y - BOXREI_A + 10
 
 BOSS_HITBOX_L equ 30  
 BOSS_HITBOX_A equ 50
@@ -151,16 +157,23 @@ TROFEU_L equ 54
 TROFEU_A equ 35
 
 SWIPE_DIST equ 2
+MORTE_MUSICA_QUADROS equ 30     ; ~0,5 s (cada quadro: SDL_Delay de 16 ms + desenho)
+MORTE_ESCALA_PCT equ 60                       ; largura da tela de morte em % da tela
+MORTE_LARGURA    equ W * MORTE_ESCALA_PCT / 100   ; = 480 px com 60%
 
 section .data
 %if DESENVOLVIMENTO
-    titulo      db "O Retorno do Rei - R: reiniciar | I: imunidade DESLIGADA", 0
-    titulo_imune db "O Retorno do Rei - R: reiniciar | I: imunidade LIGADA", 0
-    titulo_derrota db "O Retorno do Rei - Voce morreu! R para reiniciar | ESC: pausa", 0
+    titulo      db "Cappa Souls - R: reiniciar | I: imunidade DESLIGADA", 0
+    titulo_imune db "Cappa Souls - R: reiniciar | I: imunidade LIGADA", 0
+    titulo_derrota db "Cappa Souls - Voce morreu! R para reiniciar | ESC: pausa", 0
 %else
-    titulo      db "O Retorno do Rei", 0
-    titulo_derrota db "O Retorno do Rei - Voce morreu! ESC: pausa", 0
+    titulo      db "Cappa Souls", 0
+    titulo_derrota db "Cappa Souls - Voce morreu! ESC: pausa", 0
 %endif
+    main_title_f db "assets/background/Main title.bmp", 0
+    start_msg_f db "assets/background/Start Msg.bmp", 0
+    death_screen_f db "assets/background/Death screen.bmp", 0
+
     rei_bmp db "assets/sprites/Rei.bmp", 0
     rei_morte_bmp db "assets/sprites/Rei-morte.bmp", 0
     reiC1_bmp db "assets/sprites/Rei C1.bmp", 0
@@ -225,6 +238,10 @@ section .data
     
 
 section .bss
+    main_title     resq 1
+    start_msg      resq 1
+    menu_ativo     resd 1
+
     intro_ativa    resd 1
     intro_contador resd 1
     intro_boss_offset_y resd 1  ; parte da sprite ainda abaixo do solo
@@ -293,6 +310,9 @@ section .bss
     snd_percival_dash resq 1
     snd_boss_death resq 1
 
+    death_screen   resq 1
+    morte_contador resd 1   ; quadros desde a morte (para atrasar o Game Over)
+
 section .text
 ; Pilha em main:
 ; [rsp+0  .. rsp+63] SDL_Event
@@ -340,12 +360,24 @@ main:
     mov  edx, H              ; 480
     chamar SDL_RenderSetLogicalSize
 
+
+    ; ---- título ----
+    lea  rdi, [main_title_f]
+    call CarregarTextura
+    mov  [main_title], rax
+
+    lea rdi, [start_msg_f]
+    call CarregarTextura
+    mov [start_msg], rax
+
+    lea  rdi, [death_screen_f]
+    call CarregarTextura
+    mov  [death_screen], rax
     ; ---- chão ----
 
     lea  rdi, [img_file]         ; primeiro mapa: fogueira
     call CarregarTextura
     mov  r15, rax                   ; r15 = textura do chão
-
 
     ; ---- carrega o sprite ----
     ; sprite parado
@@ -443,7 +475,11 @@ main:
     chamar Mix_LoadMUS
     mov  [percival_theme], rax
 
-    mov  edi, 40                 ; volume global da música (0 a 128)
+    lea  rdi, [game_over_f]
+    chamar Mix_LoadMUS
+    mov  [game_over], rax
+
+    mov  edi, 60                 ; volume global da música (0 a 128)
     chamar Mix_VolumeMusic
 
     ; pega o tamanho real da imagem, para não distorcer o sprite
@@ -464,6 +500,7 @@ main:
     xor  edi, edi
     chamar SDL_GetKeyboardState    ; devolve ponteiro para um array de bytes
     mov  r13, rax                ; r13 = estado do teclado
+    mov  dword [menu_ativo], 1
     jmp  .reiniciar
 
 .loop:
@@ -476,7 +513,22 @@ main:
     je   .fim
     cmp  dword [rsp], SDL_KEYDOWN       ; foi uma tecla pressionada?
     jne  .eventos
+        cmp  dword [menu_ativo], 0
+    je   .eventos_jogo
+
+    ; Na tela inicial, somente W inicia a partida.
+    cmp  byte [rsp+13], 0
+    jne  .eventos
+    cmp  dword [rsp+16], SC_W
+    jne  .eventos
+
+    mov  dword [menu_ativo], 0
+    mov  dword [pausa_aguarda_teclas], 1
+    jmp  .eventos
+
+.eventos_jogo:
     PAUSA_EVENTOS
+
 %if DESENVOLVIMENTO
     cmp  byte [rsp+13], 0              ; uma acao por pressionamento, sem repeticao
     jne  .eventos
@@ -496,6 +548,17 @@ main:
     chamar SDL_SetWindowTitle
 %endif
     jmp  .eventos
+
+.menu_inicial:
+    mov  dword [menu_ativo], 1
+    mov  dword [pausa_ativa], 0
+    mov  dword [pausa_aguarda_teclas], 1
+
+    mov  edi, -1
+    PAUSA_API Mix_Resume
+    PAUSA_API Mix_ResumeMusic
+
+    jmp  .reiniciar
 
 .reiniciar:
     ; Reutiliza janela e sprites; so restaura o fundo se mudou de cenario.
@@ -518,6 +581,15 @@ main:
 
 .teclado:
     PAUSA_QUADRO
+
+    cmp  dword [menu_ativo], 0
+    je   .verifica_intro
+
+    mov  dword [movendo], 0
+    mov  r14, [king_idle]
+    jmp  .desenha
+
+.verifica_intro:
     cmp dword [intro_ativa], 0
     je .jogando
     call AtualizarEntradaArena
@@ -777,6 +849,10 @@ main:
     cmp dword [rei_morto], 0
     je .verificar_ataque
 .derrota_player:
+    mov  dword [morte_contador], 0   ; <-- começa a contar o atraso
+    xor  edi, edi                    ; <-- corta a música da luta
+    call TrocarMusica
+
     mov dword [movendo], 0
     mov dword [atk_dir], 0
     mov dword [ataque_timer], 0
@@ -852,6 +928,18 @@ main:
 .rei_derrotado:
     mov  r14, [king_morte]
 
+    ; Conta ate MORTE_MUSICA_QUADROS e toca o Game Over uma unica vez.
+    mov  eax, [morte_contador]
+    cmp  eax, MORTE_MUSICA_QUADROS
+    jae  .desenha                  ; ja passou (ou ja tocou): nao repete
+    inc  eax
+    mov  [morte_contador], eax
+    cmp  eax, MORTE_MUSICA_QUADROS
+    jne  .desenha
+    mov  rdi, [game_over]
+    mov  esi, 1                    ; 1 = toca uma vez e para
+    call TrocarMusicaSemLoop
+
 .desenha:
     ; Obtém o tamanho do sprite atual
     mov  rdi, r14
@@ -915,6 +1003,73 @@ main:
     xor  edx, edx                 ; srcrect = NULL -> usa a imagem inteira
     lea  rcx, [rsp+64]            ; dstrect
     chamar SDL_RenderCopy
+
+        cmp  dword [menu_ativo], 0
+    je   .sem_menu_inicial
+
+    ; Main title: centralizado horizontalmente, perto do topo.
+    mov  rdi, [main_title]
+    xor  esi, esi
+    xor  edx, edx
+    lea  rcx, [tex_w]
+    lea  r8, [tex_h]
+    chamar SDL_QueryTexture
+
+    ; Redimensiona mantendo a proporção original.
+    mov  eax, [tex_h]
+    imul eax, MAIN_TITLE_W
+    xor  edx, edx
+    div  dword [tex_w]
+    mov  [rsp+76], eax             ; altura proporcional
+
+    mov  dword [rsp+72], MAIN_TITLE_W
+    mov  eax, W
+    sub  eax, MAIN_TITLE_W
+    sar  eax, 1
+    mov  [rsp+64], eax             ; x centralizado
+    mov  dword [rsp+68], 20        ; y perto do topo
+
+    mov  rdi, r12
+    mov  rsi, [main_title]
+    xor  edx, edx
+    lea  rcx, [rsp+64]
+    chamar SDL_RenderCopy
+
+    ; Start Msg: centralizado horizontalmente, perto da parte inferior.
+    mov  rdi, [start_msg]
+    xor  esi, esi
+    xor  edx, edx
+    lea  rcx, [tex_w]
+    lea  r8, [tex_h]
+    chamar SDL_QueryTexture
+
+    ; Redimensiona mantendo a proporção original.
+    mov  eax, [tex_h]
+    imul eax, START_MSG_W
+    xor  edx, edx
+    div  dword [tex_w]
+    mov  [rsp+76], eax             ; altura proporcional
+
+    mov  dword [rsp+72], START_MSG_W
+    mov  eax, W
+    sub  eax, START_MSG_W
+    sar  eax, 1
+    mov  [rsp+64], eax             ; x centralizado
+
+    mov  eax, H
+    sub  eax, [rsp+76]
+    sub  eax, 20
+    mov  [rsp+68], eax             ; y perto da parte inferior
+
+    mov  rdi, r12
+    mov  rsi, [start_msg]
+    xor  edx, edx
+    lea  rcx, [rsp+64]
+    chamar SDL_RenderCopy
+
+    jmp  .apresenta_quadro
+
+.sem_menu_inicial:
 
     ; Oculta as hitboxes de depuracao durante a apresentacao.
     cmp dword [intro_ativa], 0
@@ -1209,6 +1364,46 @@ main:
     chamar SDL_RenderDrawRect
 
 .apresenta_quadro:
+     ; Tela de morte por cima de tudo, reduzida e centralizada.
+    cmp  dword [pausa_ativa], 0
+    jne  .sem_tela_morte
+    cmp  dword [rei_morto], 0
+    je   .sem_tela_morte
+
+    ; Tamanho original da imagem (so para calcular a proporcao)
+    mov  rdi, [death_screen]
+    xor  esi, esi
+    xor  edx, edx
+    lea  rcx, [tex_w]
+    lea  r8, [tex_h]
+    chamar SDL_QueryTexture
+
+    ; largura fixa; altura = tex_h * largura / tex_w (mantem a proporcao)
+    mov  dword [rsp+72], MORTE_LARGURA
+    mov  eax, [tex_h]
+    imul eax, MORTE_LARGURA
+    xor  edx, edx
+    div  dword [tex_w]
+    mov  [rsp+76], eax             ; h proporcional
+
+    ; centraliza na area logica 800x450
+    mov  ecx, H
+    sub  ecx, eax
+    sar  ecx, 1
+    mov  [rsp+68], ecx             ; y = (H - h) / 2
+
+    mov  eax, W
+    sub  eax, MORTE_LARGURA
+    sar  eax, 1
+    mov  [rsp+64], eax             ; x = (W - w) / 2
+
+    mov  rdi, r12
+    mov  rsi, [death_screen]
+    xor  edx, edx                  ; srcrect = NULL: imagem inteira
+    lea  rcx, [rsp+64]             ; dstrect
+    chamar SDL_RenderCopy
+.sem_tela_morte:
+
     ;Restaura a cor do pincel para Preto, senão a tela piscará vermelho no próximo frame
     mov rdi, r12
     xor esi, esi
@@ -1225,6 +1420,23 @@ main:
     jmp  .loop
 
 .fim:
+
+.libera_titulo:
+    cmp qword [main_title], 0
+    je  .sem_titulo
+    mov  rdi, [main_title]
+    chamar SDL_DestroyTexture
+.sem_titulo:
+    cmp qword [start_msg], 0
+    je  .sem_start_msg
+    mov  rdi, [start_msg]
+    chamar SDL_DestroyTexture
+.sem_start_msg:
+    cmp qword [death_screen], 0
+    je  .sem_death_screen
+    mov rdi, [death_screen]
+    chamar SDL_DestroyTexture
+.sem_death_screen:
     cmp qword [boss_texturas], 0
     je .boss_ja_removido
     xor  r13d, r13d
@@ -1282,6 +1494,12 @@ main:
 
 .sem_free_percival:
 
+    mov  rdi, [game_over]
+    test rdi, rdi
+    jz   .sem_free_game_over
+    chamar Mix_FreeMusic
+
+.sem_free_game_over:
 
     chamar SDL_Quit
 
@@ -1304,8 +1522,8 @@ ReiniciarPartida:
 %endif
     mov  byte [cena_atual], 0     ; abertura e R voltam para a fogueira
     mov  dword [rei_morto], 0
-    mov  dword [rei_x], REI_INICIO_X
-    mov  dword [rei_y], REI_INICIO_Y
+    mov  dword [rei_x], REI_FOGUEIRA_X
+    mov  dword [rei_y], REI_FOGUEIRA_Y
     mov  dword [frame_atual], 0
     mov  dword [cont_anim], 0
     mov  dword [movendo], 0
@@ -1860,7 +2078,13 @@ CarregarTextura:
 
 ; rdi = Mix_Music* a tocar em loop; rdi = 0 para parar a musica (silencio).
 ; Preserva r8-r11. Destroi rax, rcx, rdx, rsi, rdi.
+; rdi = Mix_Music* (0 = silencio).
+; TrocarMusica  : toca em loop infinito.
+; TrocarMusicaSemLoop : esi = repeticoes (1 = toca uma vez e para).
+; Preserva r8-r11. Destroi rax, rcx, rdx, rsi, rdi.
 TrocarMusica:
+    mov  esi, -1                  ; loop infinito
+TrocarMusicaSemLoop:
     push rbp
     mov  rbp, rsp
     push r8
@@ -1871,8 +2095,7 @@ TrocarMusica:
 
     test rdi, rdi
     jz   .silencio
-    mov  esi, -1                  ; -1 = loop infinito
-    chamar Mix_PlayMusic            ; troca a faixa atual, se houver
+    chamar Mix_PlayMusic            ; esi = repeticoes
     jmp  .fim
 .silencio:
     chamar Mix_HaltMusic
